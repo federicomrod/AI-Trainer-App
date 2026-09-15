@@ -11,3 +11,10 @@ server/.venv/
 
 # macOS
 .DS_Store
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/*.xcuserdatad/
+ios/**/DerivedData/
+ios/**/.build/
+ios/**/*.xcworkspace/xcuserdata/
