@@ -1,0 +1,13 @@
+# SQLite database (local test data, not source)
+server/*.db
+
+# Python
+__pycache__/
+*.pyc
+server/.venv/
+
+# Secrets
+.env
+
+# macOS
+.DS_Store
