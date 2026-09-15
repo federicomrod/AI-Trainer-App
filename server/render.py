@@ -26,6 +26,12 @@ def render_reply(decision):
     it renders the fixed prompts/safety-response.md text directly)."""
     lines = [decision.get("why", "").strip()]
 
+    for change in decision.get("plan_diff") or []:
+        lines.append(
+            f"\n- {change.get('date')}: {change.get('from')} -> "
+            f"{change.get('to')} — {change.get('reason')}"
+        )
+
     notes = decision.get("specialist_notes") or []
     if len(notes) > MAX_SPECIALISTS:
         notes = notes[:MAX_SPECIALISTS]
