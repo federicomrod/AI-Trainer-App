@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	This project otherwise auto-generates its Info.plist from build
+	settings (GENERATE_INFOPLIST_FILE = YES). Xcode merges this file's
+	keys in alongside that generation -- it's the supported way to add
+	entries too complex for a flat INFOPLIST_KEY_* build setting, like
+	the nested dict below.
+
+	NSAllowsArbitraryLoads: the backend is a local dev server on plain
+	HTTP at a LAN IP that changes as the Mac moves between networks --
+	not a fixed, certificate-bearing HTTPS host. Disabling ATS entirely
+	is the honest tradeoff for that, not a narrower exception. Revisit
+	before this app talks to anything but a machine on the same LAN.
+	-->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<!--
+	iOS 14+ shows a one-time permission prompt before an app can reach
+	other devices on the local network -- this is the description shown
+	on that prompt. The Simulator doesn't enforce this (it shares the
+	Mac's own network directly), but a physical iPhone will.
+	-->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>AI Trainer talks to your coach backend running on your computer, on your local network.</string>
+</dict>
+</plist>

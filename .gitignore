@@ -16,5 +16,6 @@ server/.venv/
 ios/**/xcuserdata/
 ios/**/*.xcuserdatad/
 ios/**/DerivedData/
+ios/**/build/
 ios/**/.build/
 ios/**/*.xcworkspace/xcuserdata/
