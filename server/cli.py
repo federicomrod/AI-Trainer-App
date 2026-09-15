@@ -1,6 +1,6 @@
 """
 cli.py — type a message, see the briefing, the raw decision JSON, and
-the rendered coach reply. This is the whole M0 core loop end to end.
+the rendered coach reply.
 
 Usage:
     python3 cli.py                        # no message -- just "what's today"
@@ -9,24 +9,15 @@ Usage:
 Runs against whatever is currently seeded in hybrid_coach.db -- use
 seed.py first (messy or calm) to set up a scenario to test against.
 
-Order of operations, matching CLAUDE.md's core loop:
-    1. Assemble the briefing from the database.
-    2. Hard safety pre-check on the raw message -- BEFORE anything
-       else runs. If it trips, the model is never called.
-    3. Otherwise, the one model call.
-    4. Hard validation of what came back (shape, then the duration
-       cap against today's actual available time).
-    5. Save the accepted exchange, then render it.
+This is a thin terminal front end over coach.run_turn(), which is the
+one place the actual core loop lives. server/api.py is the other front
+end over that same function, for the iOS app.
 """
 
 import json
 import sys
 
-import planner
-import render
-import safety
-import validation
-from briefing import build_briefing
+import coach
 from db import get_connection
 
 BAR = "=" * 70
@@ -38,89 +29,36 @@ def heading(title):
     print(BAR)
 
 
-def save_message(conn, role, content):
-    conn.execute(
-        "INSERT INTO messages (role, content) VALUES (?, ?)", (role, content)
-    )
-    conn.commit()
-
-
-def fabricated_safety_decision():
-    """A schema-shaped decision for the safety pre-check path. Nothing
-    here is model output -- the model was never called -- so `why` and
-    `specialist_notes` stay empty. The fixed text from
-    prompts/safety-response.md is what actually gets shown; this dict
-    exists so the exchange has the same shape in messages.content as a
-    normal decision, for the recent-decisions briefing section later."""
-    return {
-        "decision": "REST",
-        "today": {"type": "rest", "duration_min": 0, "exercises": [],
-                   "intensity_note": ""},
-        "why": "",
-        "plan_diff": [],
-        "specialist_notes": [],
-        "memory_to_add": [],
-        "question": None,
-        "safety_flag": ("pre-check flagged possible injury/illness "
-                         "language in the message; the model was not "
-                         "called"),
-    }
-
-
 def main():
     message = " ".join(sys.argv[1:]).strip()
     conn = get_connection()
 
-    briefing_text = build_briefing(conn)
+    result = coach.run_turn(conn, message)
+
     heading("BRIEFING")
-    print(briefing_text)
+    print(result.briefing)
     print()
 
-    if message:
-        save_message(conn, "user", message)
-
-    # --- Hard safety pre-check. Runs before anything else, and skips
-    # the model call entirely if it trips. ---
-    if safety.check_message(message):
-        heading("SAFETY CHECK: flagged — skipping the model call entirely")
-        decision = fabricated_safety_decision()
-        reply_text = safety.safety_response_text()
-        save_message(conn, "assistant", json.dumps(decision))
-
-        heading("RAW DECISION JSON")
-        print(json.dumps(decision, indent=2))
-        print()
-        heading("RENDERED COACH REPLY")
-        print(reply_text)
-        return
-
-    # --- The one model call. ---
-    try:
-        decision = planner.get_decision(briefing_text, message)
-    except planner.PlannerError as e:
+    if result.error == "planner_error":
         heading("PLANNER ERROR — no decision produced, nothing saved")
-        print(str(e))
+        print(result.error_detail)
         sys.exit(1)
+
+    if result.safety_flagged:
+        heading("SAFETY CHECK: flagged — skipping the model call entirely")
 
     heading("RAW DECISION JSON")
-    print(json.dumps(decision, indent=2))
+    print(json.dumps(result.decision, indent=2))
     print()
 
-    # --- Hard validation, after the call. ---
-    try:
-        validation.validate_shape(decision)
-        available_min, basis = validation.get_available_minutes(conn, message)
-        validation.validate_duration(decision, available_min, basis)
-    except validation.ValidationError as e:
+    if result.error == "validation_error":
         heading("VALIDATION FAILED — decision rejected, nothing saved, "
                 "nothing rendered")
-        print(str(e))
+        print(result.error_detail)
         sys.exit(1)
 
-    save_message(conn, "assistant", json.dumps(decision))
-
     heading("RENDERED COACH REPLY")
-    print(render.render_reply(decision))
+    print(result.reply)
 
 
 if __name__ == "__main__":
