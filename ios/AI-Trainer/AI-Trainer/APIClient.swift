@@ -46,7 +46,17 @@ struct APIClient {
         // reasoning before answering) -- give it real room before
         // URLSession times the request out from under it.
         request.timeoutInterval = 60
+        return try await send(request, decoding: TurnResponse.self)
+    }
 
+    /// The full conversation so far, for Coach chat. Each row's `text`
+    /// is already final display text -- see ChatMessage's doc comment.
+    func fetchHistory() async throws -> [ChatMessage] {
+        let request = URLRequest(url: Self.baseURL.appendingPathComponent("messages"))
+        return try await send(request, decoding: [ChatMessage].self)
+    }
+
+    private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError.badResponse
@@ -55,7 +65,7 @@ struct APIClient {
             throw APIError.http(http.statusCode)
         }
         do {
-            return try JSONDecoder().decode(TurnResponse.self, from: data)
+            return try JSONDecoder().decode(T.self, from: data)
         } catch {
             throw APIError.decoding(error)
         }

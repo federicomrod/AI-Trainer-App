@@ -94,3 +94,17 @@ struct TurnResponse: Codable {
         case errorDetail = "error_detail"
     }
 }
+
+/// One row from GET /messages, for Coach chat. `text` is already the
+/// final display text either way -- a user row's own words, or an
+/// assistant row's reply reconstructed server-side by
+/// coach.reply_text_for() from the decision JSON that was actually
+/// saved. This view never sees or re-derives that JSON itself.
+struct ChatMessage: Codable, Identifiable {
+    let id: Int
+    let role: String
+    let text: String
+    let timestamp: String
+
+    var isUser: Bool { role == "user" }
+}

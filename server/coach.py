@@ -36,7 +36,12 @@ def _fabricated_safety_decision():
     `specialist_notes` stay empty. The fixed text from
     prompts/safety-response.md is what actually gets shown; this dict
     exists so the exchange has the same shape in messages.content as a
-    normal decision, for the recent-decisions briefing section later."""
+    normal decision, for the recent-decisions briefing section later.
+
+    `_precheck_only` isn't part of CLAUDE.md's decision schema -- it's
+    an internal marker so reply_text_for() can tell this dict apart
+    from a real decision when reconstructing chat history later,
+    without guessing from `why` being empty."""
     return {
         "decision": "REST",
         "today": {"type": "rest", "duration_min": 0, "exercises": [],
@@ -49,7 +54,18 @@ def _fabricated_safety_decision():
         "safety_flag": ("pre-check flagged possible injury/illness "
                          "language in the message; the model was not "
                          "called"),
+        "_precheck_only": True,
     }
+
+
+def reply_text_for(decision):
+    """The reply text for a decision dict, whether it's fresh off the
+    model or read back out of messages.content later (chat history).
+    One place that knows the mapping, so a past turn renders exactly
+    the same way it did live."""
+    if decision.get("_precheck_only"):
+        return safety.safety_response_text()
+    return render.render_reply(decision)
 
 
 def _save_message(conn, role, content):
@@ -73,11 +89,10 @@ def run_turn(conn, message):
     # the model call entirely if it trips. ---
     if safety.check_message(message):
         decision = _fabricated_safety_decision()
-        reply_text = safety.safety_response_text()
         _save_message(conn, "assistant", json.dumps(decision))
         return TurnResult(
-            briefing=briefing_text, decision=decision, reply=reply_text,
-            safety_flagged=True,
+            briefing=briefing_text, decision=decision,
+            reply=reply_text_for(decision), safety_flagged=True,
         )
 
     # --- The one model call. ---
@@ -104,5 +119,5 @@ def run_turn(conn, message):
 
     return TurnResult(
         briefing=briefing_text, decision=decision,
-        reply=render.render_reply(decision), safety_flagged=False,
+        reply=reply_text_for(decision), safety_flagged=False,
     )

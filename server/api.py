@@ -20,7 +20,8 @@ person's own phone on their own network — revisit before it's anything
 more than that.
 """
 
-from typing import Optional
+import json
+from typing import List, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -45,6 +46,13 @@ class TurnResponse(BaseModel):
     error_detail: Optional[str]
 
 
+class ChatMessage(BaseModel):
+    id: int
+    role: str
+    text: str
+    timestamp: str
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -57,6 +65,35 @@ def get_briefing():
     coach anything yet."""
     conn = get_connection()
     return {"briefing": build_briefing(conn)}
+
+
+@app.get("/messages", response_model=List[ChatMessage])
+def get_messages():
+    """The whole conversation, for Coach chat. A user row's `content`
+    is already display text; an assistant row's `content` is the
+    decision JSON that was actually saved (see coach.py), so it's
+    rendered here through the same reply_text_for() that a live turn
+    uses -- a past message reads exactly the way it did when it was
+    new. A row that somehow isn't valid JSON falls back to showing its
+    raw content rather than dropping it silently."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, role, content, timestamp FROM messages ORDER BY id ASC"
+    ).fetchall()
+
+    out = []
+    for row in rows:
+        text = row["content"]
+        if row["role"] == "assistant":
+            try:
+                text = coach.reply_text_for(json.loads(row["content"]))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        out.append(ChatMessage(
+            id=row["id"], role=row["role"], text=text,
+            timestamp=row["timestamp"],
+        ))
+    return out
 
 
 @app.post("/turn", response_model=TurnResponse)
