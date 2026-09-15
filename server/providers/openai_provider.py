@@ -64,7 +64,17 @@ def get_decision(system_prompt, user_content, schema):
                     "strict": True,
                 },
             },
-            max_completion_tokens=2000,
+            # gpt-5 is a reasoning model: reasoning tokens are billed out
+            # of max_completion_tokens before any visible content is
+            # written. At the old cap (2000) reasoning alone could burn
+            # the whole budget and leave nothing for the JSON answer,
+            # returning empty content with finish_reason "length". Low
+            # effort keeps reasoning short for this task (a bounded
+            # decision, not open-ended problem solving) and the larger
+            # cap leaves room for a full decision even when effort runs
+            # a bit long.
+            reasoning_effort="low",
+            max_completion_tokens=4000,
         )
     except openai.OpenAIError as e:
         raise PlannerError(f"OpenAI call failed: {e}") from e
