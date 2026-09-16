@@ -151,6 +151,7 @@ struct ChatView: View {
             TextField("Message the coach…", text: $viewModel.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...4)
+            VoiceInputButton(text: $viewModel.draft)
             Button {
                 Task { await viewModel.send() }
             } label: {

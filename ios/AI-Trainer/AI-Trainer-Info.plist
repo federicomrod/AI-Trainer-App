@@ -28,5 +28,15 @@
 	-->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AI Trainer talks to your coach backend running on your computer, on your local network.</string>
+	<!--
+	Voice input (CLAUDE.md: on-device speech recognition, no upload).
+	Both prompts are required the moment the app asks for either
+	permission -- missing either one is an instant crash, not a denied
+	request.
+	-->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AI Trainer turns your voice into a message for the coach, entirely on your device.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AI Trainer needs the microphone to hear your voice message for the coach.</string>
 </dict>
 </plist>

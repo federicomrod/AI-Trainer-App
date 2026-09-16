@@ -179,6 +179,7 @@ struct TodayView: View {
             TextField("Tell the coach something…", text: $viewModel.messageDraft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...4)
+            VoiceInputButton(text: $viewModel.messageDraft)
             Button {
                 Task { await viewModel.sendDraft() }
             } label: {
