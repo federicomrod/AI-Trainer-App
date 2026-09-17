@@ -21,11 +21,12 @@ more than that.
 """
 
 import json
-from typing import List, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+import checkin as checkin_module
 import coach
 import week as week_module
 from briefing import build_briefing
@@ -52,6 +53,22 @@ class ChatMessage(BaseModel):
     role: str
     text: str
     timestamp: str
+
+
+class CheckInRequest(BaseModel):
+    sleep: Literal["poor", "normal", "good"]
+    energy: int = Field(ge=1, le=5)
+    soreness: Dict[str, str] = {}
+    note: Optional[str] = None
+
+
+class CheckInResponse(BaseModel):
+    id: int
+    date: str
+    sleep: str
+    energy: int
+    soreness: Dict[str, str]
+    note: Optional[str]
 
 
 class WeekDay(BaseModel):
@@ -116,6 +133,15 @@ def get_week():
     whether a decision moved it and why. See week.py."""
     conn = get_connection()
     return week_module.get_week(conn)
+
+
+@app.post("/checkin", response_model=CheckInResponse)
+def post_checkin(req: CheckInRequest):
+    """Save (or update) today's check-in. See checkin.py."""
+    conn = get_connection()
+    return checkin_module.save_checkin(
+        conn, req.sleep, req.energy, req.soreness, req.note
+    )
 
 
 @app.post("/turn", response_model=TurnResponse)

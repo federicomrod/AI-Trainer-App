@@ -56,6 +56,7 @@ final class TodayViewModel: ObservableObject {
 
 struct TodayView: View {
     @StateObject private var viewModel = TodayViewModel()
+    @State private var showingCheckIn = false
 
     var body: some View {
         NavigationStack {
@@ -67,6 +68,18 @@ struct TodayView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle("Today")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingCheckIn = true
+                    } label: {
+                        Label("Check In", systemImage: "checkmark.circle")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingCheckIn) {
+                CheckInView()
+            }
             .safeAreaInset(edge: .bottom) { messageBar }
             .task {
                 if viewModel.response == nil {

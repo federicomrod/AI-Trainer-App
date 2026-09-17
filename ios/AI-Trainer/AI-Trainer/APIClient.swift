@@ -62,6 +62,11 @@ struct APIClient {
         return try await send(request, decoding: [WeekDay].self)
     }
 
+    /// Save (or update) today's check-in.
+    func submitCheckIn(_ body: CheckInRequest) async throws -> CheckInResponse {
+        try await post("checkin", body: body, decoding: CheckInResponse.self)
+    }
+
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {

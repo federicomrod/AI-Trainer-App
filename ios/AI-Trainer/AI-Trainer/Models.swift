@@ -140,3 +140,22 @@ struct WeekDay: Codable, Identifiable {
         case movedReason = "moved_reason"
     }
 }
+
+/// POST /checkin's body. One check-in per calendar day -- submitting
+/// again today updates that day's row server-side (see
+/// server/checkin.py) rather than creating a duplicate.
+struct CheckInRequest: Encodable {
+    let sleep: String  // "poor" | "normal" | "good"
+    let energy: Int    // 1...5
+    let soreness: [String: String]
+    let note: String?
+}
+
+struct CheckInResponse: Decodable {
+    let id: Int
+    let date: String
+    let sleep: String
+    let energy: Int
+    let soreness: [String: String]
+    let note: String?
+}
