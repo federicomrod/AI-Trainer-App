@@ -16,6 +16,8 @@ struct AI_TrainerApp: App {
                     .tabItem { Label("Today", systemImage: "sun.max") }
                 WeekView()
                     .tabItem { Label("Week", systemImage: "calendar") }
+                ProgressChartView()
+                    .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
                 ChatView()
                     .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right") }
             }

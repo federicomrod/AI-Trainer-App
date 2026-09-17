@@ -96,6 +96,13 @@ struct APIClient {
         try await put("goals", body: GoalsPayload(goals: goals), decoding: GoalsPayload.self)
     }
 
+    /// Real trend data for Progress view: lift weight-over-time series
+    /// and weekly completed-session counts.
+    func fetchProgress() async throws -> ProgressResponse {
+        let request = URLRequest(url: Self.baseURL.appendingPathComponent("progress"))
+        return try await send(request, decoding: ProgressResponse.self)
+    }
+
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {

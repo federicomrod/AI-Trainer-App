@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 import checkin as checkin_module
 import coach
 import log_session
+import progress as progress_module
 import week as week_module
 from briefing import build_briefing
 from db import get_connection
@@ -117,6 +118,21 @@ class GoalsResponse(BaseModel):
 
 class GoalsRequest(BaseModel):
     goals: List[str]
+
+
+class LiftPoint(BaseModel):
+    date: str
+    weight: float
+
+
+class WeeklySessionCount(BaseModel):
+    week_start: str
+    count: int
+
+
+class ProgressResponse(BaseModel):
+    lifts: Dict[str, List[LiftPoint]]
+    weekly_sessions: List[WeeklySessionCount]
 
 
 class WeekDay(BaseModel):
@@ -241,6 +257,14 @@ def put_goals(req: GoalsRequest):
     )
     conn.commit()
     return {"goals": req.goals}
+
+
+@app.get("/progress", response_model=ProgressResponse)
+def get_progress():
+    """Real trend data, straight out of lifts and sessions -- no
+    scores, no streaks. See progress.py."""
+    conn = get_connection()
+    return progress_module.get_progress(conn)
 
 
 @app.post("/turn", response_model=TurnResponse)

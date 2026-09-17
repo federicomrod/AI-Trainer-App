@@ -236,3 +236,46 @@ struct LogSessionResponse: Decodable {
 struct GoalsPayload: Codable {
     let goals: [String]
 }
+
+/// Both progress series use plain "yyyy-MM-dd" dates from the server;
+/// parsed once here so charts get a real continuous timeline instead
+/// of evenly-spaced category labels.
+let isoDayFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd"
+    f.timeZone = TimeZone(identifier: "UTC")
+    return f
+}()
+
+/// One point in an exercise's weight-over-time series, from
+/// GET /progress.
+struct LiftPoint: Decodable, Identifiable {
+    let date: String
+    let weight: Double
+
+    var id: String { date }
+    var dateValue: Date { isoDayFormatter.date(from: date) ?? Date() }
+}
+
+struct WeeklySessionCount: Decodable, Identifiable {
+    let weekStart: String
+    let count: Int
+
+    var id: String { weekStart }
+    var weekStartValue: Date { isoDayFormatter.date(from: weekStart) ?? Date() }
+
+    enum CodingKeys: String, CodingKey {
+        case weekStart = "week_start"
+        case count
+    }
+}
+
+struct ProgressResponse: Decodable {
+    let lifts: [String: [LiftPoint]]
+    let weeklySessions: [WeeklySessionCount]
+
+    enum CodingKeys: String, CodingKey {
+        case lifts
+        case weeklySessions = "weekly_sessions"
+    }
+}
