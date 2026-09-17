@@ -28,12 +28,16 @@ enum APIError: Error, LocalizedError {
 }
 
 struct APIClient {
-    /// Wherever the backend is actually running. The Simulator shares
-    /// this Mac's own network, so a LAN IP here reaches any machine on
-    /// the same Wi-Fi -- including this one, or the Mac mini, or
-    /// wherever the backend gets deployed next. Update this when that
-    /// address changes; it isn't discovered automatically.
-    static var baseURL = URL(string: "http://192.168.0.193:8000")!
+    /// Wherever the backend is actually running. Starts from whatever
+    /// ServerDiscovery last confirmed via Bonjour, or this address as
+    /// a last-resort fallback (only matters on a first-ever launch,
+    /// before any discovery has ever succeeded, or if Bonjour is
+    /// somehow unavailable) -- AI_TrainerApp resolves this for real at
+    /// launch via ServerDiscovery.resolveBaseURL() before any screen
+    /// makes its own request, so this hardcoded value going stale is
+    /// no longer the problem it used to be.
+    static var baseURL = ServerDiscovery.cachedURL
+        ?? URL(string: "http://192.168.0.193:8000")!
 
     private let session = URLSession.shared
 
@@ -118,7 +122,26 @@ struct APIClient {
         )
     }
 
+    /// On a connection failure, tries one fresh Bonjour discovery and
+    /// retries once against whatever it finds -- this is what makes a
+    /// mid-session address change (the Mac moved networks, the server
+    /// restarted at a new IP) self-heal instead of hanging until
+    /// someone notices and edits baseURL by hand.
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
+        do {
+            return try await perform(request, decoding: type)
+        } catch let error as URLError where Self.isConnectivityError(error) {
+            guard let rediscovered = await ServerDiscovery.discover(),
+                  rediscovered != Self.baseURL
+            else {
+                throw error
+            }
+            Self.baseURL = rediscovered
+            return try await perform(Self.rebase(request, to: rediscovered), decoding: type)
+        }
+    }
+
+    private func perform<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError.badResponse
@@ -131,6 +154,31 @@ struct APIClient {
         } catch {
             throw APIError.decoding(error)
         }
+    }
+
+    private static func isConnectivityError(_ error: URLError) -> Bool {
+        switch error.code {
+        case .cannotConnectToHost, .timedOut, .networkConnectionLost,
+             .cannotFindHost, .notConnectedToInternet:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Re-points a request at a new base URL, keeping its path, query,
+    /// method, headers, and body exactly as they were.
+    private static func rebase(_ request: URLRequest, to newBase: URL) -> URLRequest {
+        guard let oldURL = request.url,
+              var components = URLComponents(url: oldURL, resolvingAgainstBaseURL: false),
+              let baseComponents = URLComponents(url: newBase, resolvingAgainstBaseURL: false)
+        else { return request }
+        components.scheme = baseComponents.scheme
+        components.host = baseComponents.host
+        components.port = baseComponents.port
+        var rebased = request
+        rebased.url = components.url
+        return rebased
     }
 
     /// Shared helper for the POST-with-JSON-body endpoints (check-in,

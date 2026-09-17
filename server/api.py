@@ -21,6 +21,8 @@ more than that.
 """
 
 import json
+import os
+from contextlib import asynccontextmanager
 from datetime import date as date_type
 from typing import Dict, List, Literal, Optional
 
@@ -29,6 +31,7 @@ from pydantic import BaseModel, Field
 
 import checkin as checkin_module
 import coach
+import discovery
 import healthkit_import
 import log_session
 import progress as progress_module
@@ -36,7 +39,21 @@ import week as week_module
 from briefing import build_briefing
 from db import get_connection
 
-app = FastAPI(title="Hybrid Coach")
+# Must match whatever port uvicorn is actually told to run on (see the
+# run command above); only needs overriding if that ever changes.
+PORT = int(os.environ.get("HYBRID_COACH_PORT", "8000"))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Advertise this server on the LAN via Bonjour so the app can find
+    # it without a hardcoded IP -- see discovery.py.
+    await discovery.start(PORT)
+    yield
+    await discovery.stop()
+
+
+app = FastAPI(title="Hybrid Coach", lifespan=lifespan)
 
 
 class TurnRequest(BaseModel):

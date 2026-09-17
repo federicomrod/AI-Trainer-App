@@ -29,6 +29,16 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AI Trainer talks to your coach backend running on your computer, on your local network.</string>
 	<!--
+	Required alongside NSLocalNetworkUsageDescription for browsing
+	Bonjour services (ServerDiscovery.swift) -- iOS won't let an app
+	browse for a service type it hasn't declared here. Must match
+	server/discovery.py's SERVICE_TYPE exactly.
+	-->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_hybridcoach._tcp</string>
+	</array>
+	<!--
 	Voice input (CLAUDE.md: on-device speech recognition, no upload).
 	Both prompts are required the moment the app asks for either
 	permission -- missing either one is an instant crash, not a denied
