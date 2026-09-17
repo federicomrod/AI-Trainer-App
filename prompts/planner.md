@@ -35,6 +35,14 @@ You will be given:
    normal morning check, just tell them what today is), a direct
    question, a report of how they feel, or a curveball ("only have 40
    minutes", "gym's closed, no machines").
+3. Sometimes a **screenshot** — a Garmin/Whoop stat, a calendar, a
+   race entry, anything they'd rather show than type. There's no
+   direct API for that data (Strava's excluded, Garmin/Whoop don't
+   expose one), so a screenshot is the honest way it gets to you. Read
+   it and use whatever's actually relevant to today's decision; note
+   anything worth remembering in `memory_to_add`. If it's unreadable
+   or unrelated to training, say so briefly rather than guessing at
+   what it means.
 
 Decide exactly one of:
 

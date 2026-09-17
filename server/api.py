@@ -41,6 +41,7 @@ app = FastAPI(title="Hybrid Coach")
 
 class TurnRequest(BaseModel):
     message: str = ""
+    image_base64: Optional[str] = None
 
 
 class TurnResponse(BaseModel):
@@ -300,7 +301,7 @@ def post_healthkit_import(req: HealthKitImportRequest):
 def post_turn(req: TurnRequest):
     """The whole core loop for one message (may be empty)."""
     conn = get_connection()
-    result = coach.run_turn(conn, req.message)
+    result = coach.run_turn(conn, req.message, image_base64=req.image_base64)
     return TurnResponse(
         briefing=result.briefing,
         decision=result.decision,

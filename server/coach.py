@@ -75,15 +75,21 @@ def _save_message(conn, role, content):
     conn.commit()
 
 
-def run_turn(conn, message):
+def run_turn(conn, message, image_base64=None):
     """Run one full turn of the core loop for `message` (may be empty
-    -- "just tell me today"). Always returns a TurnResult; never
-    raises. The caller decides how to display it."""
+    -- "just tell me today") and an optional screenshot
+    (CLAUDE.md: "send the image to the model directly"). Always
+    returns a TurnResult; never raises. The caller decides how to
+    display it."""
     message = (message or "").strip()
     briefing_text = build_briefing(conn)
 
-    if message:
-        _save_message(conn, "user", message)
+    if message or image_base64:
+        # The image itself isn't stored -- it's consumed by this one
+        # call, same as CLAUDE.md's "send the image to the model
+        # directly" implies no separate image store. Anything from it
+        # worth keeping comes back through memory_to_add instead.
+        _save_message(conn, "user", message or "(shared a screenshot)")
 
     # --- Hard safety pre-check. Runs before anything else, and skips
     # the model call entirely if it trips. ---
@@ -97,7 +103,7 @@ def run_turn(conn, message):
 
     # --- The one model call. ---
     try:
-        decision = planner.get_decision(briefing_text, message)
+        decision = planner.get_decision(briefing_text, message, image_base64=image_base64)
     except planner.PlannerError as e:
         return TurnResult(
             briefing=briefing_text, decision=None, reply=None,

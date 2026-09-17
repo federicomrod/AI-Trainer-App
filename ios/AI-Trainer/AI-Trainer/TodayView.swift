@@ -10,6 +10,7 @@
 //  re-implement any formatting/voice logic of its own.
 
 import Combine
+import PhotosUI
 import SwiftUI
 
 @MainActor
@@ -18,8 +19,26 @@ final class TodayViewModel: ObservableObject {
     @Published var response: TurnResponse?
     @Published var errorMessage: String?
     @Published var messageDraft = ""
+    @Published var photoPickerItem: PhotosPickerItem?
+    #if os(iOS)
+    @Published var attachedImage: UIImage?
+    #endif
 
     private let client = APIClient()
+
+    #if os(iOS)
+    func loadAttachedImage() async {
+        guard let item = photoPickerItem else { return }
+        photoPickerItem = nil
+        if let data = try? await item.loadTransferable(type: Data.self) {
+            attachedImage = UIImage(data: data)
+        }
+    }
+
+    var hasAttachment: Bool { attachedImage != nil }
+    #else
+    var hasAttachment: Bool { false }
+    #endif
 
     func loadToday() async {
         await send(message: "")
@@ -27,16 +46,22 @@ final class TodayViewModel: ObservableObject {
 
     func sendDraft() async {
         let text = messageDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty || hasAttachment else { return }
         messageDraft = ""
-        await send(message: text)
+        #if os(iOS)
+        let imageBase64 = attachedImage?.jpegBase64ForUpload()
+        attachedImage = nil
+        #else
+        let imageBase64: String? = nil
+        #endif
+        await send(message: text, imageBase64: imageBase64)
     }
 
-    private func send(message: String) async {
+    private func send(message: String, imageBase64: String? = nil) async {
         isLoading = true
         errorMessage = nil
         do {
-            let result = try await client.turn(message: message)
+            let result = try await client.turn(message: message, imageBase64: imageBase64)
             response = result
             // The backend can succeed at the HTTP level but still
             // report a failure inside the JSON (planner_error when the
@@ -115,13 +140,51 @@ struct TodayView: View {
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
             }
-            .safeAreaInset(edge: .bottom) { messageBar }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 0) {
+                    attachmentPreview
+                    messageBar
+                }
+            }
             .task {
                 if viewModel.response == nil {
                     await viewModel.loadToday()
                 }
             }
+            #if os(iOS)
+            .onChange(of: viewModel.photoPickerItem) {
+                Task { await viewModel.loadAttachedImage() }
+            }
+            #endif
         }
+    }
+
+    @ViewBuilder
+    private var attachmentPreview: some View {
+        #if os(iOS)
+        if let image = viewModel.attachedImage {
+            HStack {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                Text("Screenshot attached")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                Button {
+                    viewModel.attachedImage = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 10)
+            .background(Theme.background)
+        }
+        #endif
     }
 
     @ViewBuilder
@@ -244,6 +307,11 @@ struct TodayView: View {
                 .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1...4)
+            PhotosPicker(selection: $viewModel.photoPickerItem, matching: .images) {
+                Image(systemName: "photo.on.rectangle")
+                    .font(.title3)
+                    .foregroundStyle(Theme.textSecondary)
+            }
             VoiceInputButton(text: $viewModel.messageDraft)
             Button {
                 Task { await viewModel.sendDraft() }
@@ -252,7 +320,7 @@ struct TodayView: View {
                     .font(.title2)
             }
             .disabled(
-                viewModel.messageDraft.trimmingCharacters(in: .whitespaces).isEmpty
+                (viewModel.messageDraft.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.hasAttachment)
                 || viewModel.isLoading
             )
         }

@@ -134,9 +134,11 @@ def _active_provider():
     return provider
 
 
-def get_decision(briefing_text, message_text):
+def get_decision(briefing_text, message_text, image_base64=None):
     """Make the one model call, through whichever provider is
-    configured. Returns the decision as a plain dict. Raises
+    configured. `image_base64` is a screenshot the athlete attached
+    (CLAUDE.md: "send the image to the model directly" -- no separate
+    vision step). Returns the decision as a plain dict. Raises
     PlannerError on anything unexpected -- no retries."""
     provider = _active_provider()
 
@@ -146,4 +148,7 @@ def get_decision(briefing_text, message_text):
         f"{message_text if message_text else '(no message -- just tell me today)'}"
     )
 
-    return provider.get_decision(_load_system_prompt(), user_content, DECISION_SCHEMA)
+    return provider.get_decision(
+        _load_system_prompt(), user_content, DECISION_SCHEMA,
+        image_base64=image_base64,
+    )

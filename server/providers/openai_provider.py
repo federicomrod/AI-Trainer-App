@@ -45,16 +45,25 @@ def _strict(schema):
     return schema
 
 
-def get_decision(system_prompt, user_content, schema):
+def get_decision(system_prompt, user_content, schema, image_base64=None):
     model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     client = OpenAI()  # reads OPENAI_API_KEY
+
+    if image_base64:
+        message_content = [
+            {"type": "text", "text": user_content},
+            {"type": "image_url",
+             "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
+        ]
+    else:
+        message_content = user_content
 
     try:
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
+                {"role": "user", "content": message_content},
             ],
             response_format={
                 "type": "json_schema",

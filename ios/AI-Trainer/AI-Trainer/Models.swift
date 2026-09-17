@@ -75,6 +75,16 @@ struct Decision: Codable {
     }
 }
 
+struct TurnRequestBody: Encodable {
+    let message: String
+    let imageBase64: String?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case imageBase64 = "image_base64"
+    }
+}
+
 /// The full response from POST /turn: the briefing that was assembled,
 /// the decision (nil if the model call itself failed), the rendered
 /// coach reply (nil if validation rejected the decision), and whether

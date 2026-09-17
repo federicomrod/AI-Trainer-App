@@ -37,11 +37,16 @@ struct APIClient {
 
     private let session = URLSession.shared
 
-    func turn(message: String) async throws -> TurnResponse {
+    /// `imageBase64` is an optional screenshot (CLAUDE.md: "send the
+    /// image to the model directly" -- no separate vision step or
+    /// upload endpoint).
+    func turn(message: String, imageBase64: String? = nil) async throws -> TurnResponse {
         var request = URLRequest(url: Self.baseURL.appendingPathComponent("turn"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(["message": message])
+        request.httpBody = try JSONEncoder().encode(
+            TurnRequestBody(message: message, imageBase64: imageBase64)
+        )
         // The model call itself can take a while (gpt-5 does real
         // reasoning before answering) -- give it real room before
         // URLSession times the request out from under it.
