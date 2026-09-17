@@ -229,15 +229,34 @@ struct LogSessionRequest: Encodable {
     let lifts: [LiftEntry]
 }
 
+/// One recorded lift, whether the athlete typed it into a field or
+/// server/lift_parser.py picked it up from the notes text -- this
+/// response doesn't distinguish which; LogSessionView figures that
+/// out itself by checking what was actually typed locally.
+struct RecordedLift: Decodable {
+    let exerciseName: String
+    let weight: Double?
+    let reps: Int?
+    let sets: Int?
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case exerciseName = "exercise_name"
+        case weight, reps, sets, note
+    }
+}
+
 struct LogSessionResponse: Decodable {
     let date: String
     let type: String
     let status: String
     let actualSummary: String?
+    let liftsRecorded: [RecordedLift]
 
     enum CodingKeys: String, CodingKey {
         case date, type, status
         case actualSummary = "actual_summary"
+        case liftsRecorded = "lifts_recorded"
     }
 }
 

@@ -123,7 +123,11 @@ def _load_system_prompt():
     )
 
 
-def _active_provider():
+def active_provider():
+    """Whichever provider module HYBRID_COACH_PROVIDER names -- shared
+    by this file's one decision call and lift_parser.py's smaller
+    extraction call, so both switch providers together with the same
+    one config value."""
     name = os.environ.get("HYBRID_COACH_PROVIDER", DEFAULT_PROVIDER).strip().lower()
     provider = PROVIDERS.get(name)
     if provider is None:
@@ -140,7 +144,7 @@ def get_decision(briefing_text, message_text, image_base64=None):
     (CLAUDE.md: "send the image to the model directly" -- no separate
     vision step). Returns the decision as a plain dict. Raises
     PlannerError on anything unexpected -- no retries."""
-    provider = _active_provider()
+    provider = active_provider()
 
     user_content = (
         f"BRIEFING:\n\n{briefing_text}\n\n"
@@ -148,7 +152,7 @@ def get_decision(briefing_text, message_text, image_base64=None):
         f"{message_text if message_text else '(no message -- just tell me today)'}"
     )
 
-    return provider.get_decision(
+    return provider.get_structured(
         _load_system_prompt(), user_content, DECISION_SCHEMA,
         image_base64=image_base64,
     )

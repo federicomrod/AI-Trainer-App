@@ -1,16 +1,16 @@
 """
-openai_provider.py — the OpenAI implementation of the one planner
-call. Uses Structured Outputs (response_format: json_schema, strict
-mode): the API itself guarantees the response matches the decision
-schema exactly, so there's no parsing free text and no hoping the
-model formatted things right.
+openai_provider.py — the OpenAI implementation of the one structured-
+output model call (see providers/__init__.py). Uses Structured Outputs
+(response_format: json_schema, strict mode): the API itself guarantees
+the response matches the given schema exactly, so there's no parsing
+free text and no hoping the model formatted things right.
 
-Strict mode has one requirement the shared schema in planner.py
-doesn't bother with, since it's an OpenAI-specific technicality rather
-than part of the actual decision shape: every object node needs
+Strict mode has one requirement callers' schemas don't bother with,
+since it's an OpenAI-specific technicality rather than part of any
+particular schema's actual shape: every object node needs
 "additionalProperties": false. _strict() adds that recursively on a
-copy, rather than baking an OpenAI-only detail into the schema
-planner.py hands to every provider.
+copy, rather than baking an OpenAI-only detail into every schema that
+gets handed to this provider.
 """
 
 import copy
@@ -45,7 +45,7 @@ def _strict(schema):
     return schema
 
 
-def get_decision(system_prompt, user_content, schema, image_base64=None):
+def get_structured(system_prompt, user_content, schema, image_base64=None):
     model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     client = OpenAI()  # reads OPENAI_API_KEY
 
@@ -68,7 +68,7 @@ def get_decision(system_prompt, user_content, schema, image_base64=None):
             response_format={
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "submit_decision",
+                    "name": "submit_response",
                     "schema": _strict(schema),
                     "strict": True,
                 },

@@ -112,6 +112,7 @@ class LogSessionResponse(BaseModel):
     type: str
     status: str
     actual_summary: Optional[str]
+    lifts_recorded: List[LiftEntry] = []
 
 
 class GoalsResponse(BaseModel):

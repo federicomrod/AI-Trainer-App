@@ -16,6 +16,7 @@ something the athlete already has lift history for.
 
 from datetime import date
 
+import lift_parser
 
 TYPE_KEYWORDS = {
     "legs": ["squat", "deadlift", "rdl", "leg", "lunge", "hip thrust"],
@@ -77,10 +78,31 @@ def get_log_context(conn, target_date=None):
     }
 
 
+def _merge_lifts(manual, parsed):
+    """A manually typed number wins over anything the parser also
+    found for the same exercise -- it's a deliberate, precise entry;
+    the parsed one is a best-effort backstop for whatever the athlete
+    only said, not typed. Matched by exercise name, case-insensitive."""
+    manual = manual or []
+    manual_names = {l["exercise_name"].strip().lower() for l in manual}
+    extra = [
+        l for l in (parsed or [])
+        if l.get("exercise_name", "").strip().lower() not in manual_names
+    ]
+    return manual + extra
+
+
 def save_log(conn, target_date, status, notes, lifts):
     """Record what actually happened. Updates the existing sessions
     row (there should always be exactly one per date, from the week's
-    plan) rather than inserting a second row for the same day."""
+    plan) rather than inserting a second row for the same day.
+
+    `lifts` is whatever the athlete typed into the per-exercise number
+    fields, if anything -- optional, per CLAUDE.md's logging
+    philosophy (voice/summary first, structured entry is a fallback).
+    `notes` (typed or voice-dictated) is also run through
+    lift_parser.py for any numbers mentioned there instead; the two
+    are merged, manual entries taking precedence on a name clash."""
     existing = conn.execute(
         "SELECT id FROM sessions WHERE date = ?", (target_date,)
     ).fetchone()
@@ -92,7 +114,9 @@ def save_log(conn, target_date, status, notes, lifts):
         "source = 'manual' WHERE id = ?",
         (status, notes, existing["id"]),
     )
-    for lift in lifts or []:
+
+    all_lifts = _merge_lifts(lifts, lift_parser.parse_lifts(conn, notes))
+    for lift in all_lifts:
         conn.execute(
             "INSERT INTO lifts (date, exercise_name, weight, reps, sets, note) "
             "VALUES (?, ?, ?, ?, ?, ?)",
@@ -109,4 +133,5 @@ def save_log(conn, target_date, status, notes, lifts):
         "type": row["type"],
         "status": row["status"],
         "actual_summary": row["actual_summary"],
+        "lifts_recorded": all_lifts,
     }
