@@ -85,6 +85,20 @@ struct TurnRequestBody: Encodable {
     }
 }
 
+/// One voice within a coach reply -- "head_coach", or a specialist's
+/// own name ("strength"/"endurance"/"recovery"). See
+/// server/render.py's render_segments(): a multi-voice reply (Head
+/// Coach plus a specialist chiming in) is several of these, not one
+/// string with inline **Label:** markers, so the UI can show each
+/// speaker as its own message.
+struct MessageSegment: Codable, Identifiable {
+    let speaker: String
+    let text: String
+
+    var id: String { "\(speaker)-\(text.hashValue)" }
+    var isHeadCoach: Bool { speaker == "head_coach" }
+}
+
 /// The full response from POST /turn: the briefing that was assembled,
 /// the decision (nil if the model call itself failed), the rendered
 /// coach reply (nil if validation rejected the decision), and whether
@@ -96,12 +110,14 @@ struct TurnResponse: Codable {
     let safetyFlagged: Bool
     let error: String?
     let errorDetail: String?
+    let segments: [MessageSegment]
 
     enum CodingKeys: String, CodingKey {
         case briefing, decision, reply
         case safetyFlagged = "safety_flagged"
         case error
         case errorDetail = "error_detail"
+        case segments
     }
 }
 
@@ -109,12 +125,14 @@ struct TurnResponse: Codable {
 /// final display text either way -- a user row's own words, or an
 /// assistant row's reply reconstructed server-side by
 /// coach.reply_text_for() from the decision JSON that was actually
-/// saved. This view never sees or re-derives that JSON itself.
+/// saved. `segments` is the same assistant reply split by speaker
+/// (empty for a user row); ChatView renders those instead of `text`.
 struct ChatMessage: Codable, Identifiable {
     let id: Int
     let role: String
     let text: String
     let timestamp: String
+    let segments: [MessageSegment]
 
     var isUser: Bool { role == "user" }
 }
@@ -299,13 +317,47 @@ struct WeeklySessionCount: Decodable, Identifiable {
     }
 }
 
+/// One tracked exercise's all-time max weight. Emergent, same as the
+/// trend lines -- an exercise only appears once it has a real number.
+struct LiftPR: Decodable, Identifiable {
+    let exerciseName: String
+    let maxWeight: Double
+
+    var id: String { exerciseName }
+
+    enum CodingKeys: String, CodingKey {
+        case exerciseName = "exercise_name"
+        case maxWeight = "max_weight"
+    }
+}
+
+/// Emergent KPIs from server/progress.py -- each field is nil/empty
+/// until there's real logged data behind it. No pace/distance metric:
+/// the schema has no distance field anywhere, so there's nothing real
+/// to compute it from yet.
+struct ProgressStats: Decodable {
+    let liftPrs: [LiftPR]
+    let longestRideMin: Int?
+    let longestSwimMin: Int?
+    let sessionsThisWeek: Int
+
+    enum CodingKeys: String, CodingKey {
+        case liftPrs = "lift_prs"
+        case longestRideMin = "longest_ride_min"
+        case longestSwimMin = "longest_swim_min"
+        case sessionsThisWeek = "sessions_this_week"
+    }
+}
+
 struct ProgressResponse: Decodable {
     let lifts: [String: [LiftPoint]]
     let weeklySessions: [WeeklySessionCount]
+    let stats: ProgressStats
 
     enum CodingKeys: String, CodingKey {
         case lifts
         case weeklySessions = "weekly_sessions"
+        case stats
     }
 }
 

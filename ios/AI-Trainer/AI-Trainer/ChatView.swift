@@ -65,7 +65,7 @@ final class ChatViewModel: ObservableObject {
         // which loadHistory() would otherwise duplicate against.
         let placeholderID = -(messages.count + 1)
         let echoText = text.isEmpty ? "📷 Screenshot" : text
-        messages.append(ChatMessage(id: placeholderID, role: "user", text: echoText, timestamp: ""))
+        messages.append(ChatMessage(id: placeholderID, role: "user", text: echoText, timestamp: "", segments: []))
 
         #if os(iOS)
         let imageBase64 = attachedImage?.jpegBase64ForUpload()
@@ -79,7 +79,8 @@ final class ChatViewModel: ObservableObject {
             let result = try await client.turn(message: text, imageBase64: imageBase64)
             if let reply = result.reply {
                 messages.append(ChatMessage(
-                    id: placeholderID - 1, role: "assistant", text: reply, timestamp: ""
+                    id: placeholderID - 1, role: "assistant", text: reply, timestamp: "",
+                    segments: result.segments
                 ))
             } else {
                 // planner_error or validation_error: nothing safe to
@@ -108,7 +109,7 @@ struct ChatView: View {
                                 .padding(.top, 60)
                         }
                         ForEach(viewModel.messages) { message in
-                            bubble(message)
+                            exchange(message)
                                 .id(message.id)
                         }
                         if viewModel.isSending {
@@ -187,22 +188,90 @@ struct ChatView: View {
         }
     }
 
+    // One exchange (one row from GET /messages) can render as several
+    // bubbles -- Head Coach plus a specialist chiming in are two
+    // different voices, not one paragraph with an inline bold label.
+    // Tight spacing between them reads as one back-and-forth moment;
+    // the looser spacing between *exchanges* (set by the outer
+    // LazyVStack) is what separates one turn from the next.
+    @ViewBuilder
+    private func exchange(_ message: ChatMessage) -> some View {
+        if message.isUser {
+            bubble(text: message.text, isUser: true)
+        } else if message.segments.isEmpty {
+            // Defensive fallback -- shouldn't happen once the backend
+            // always returns segments, but a message with no segments
+            // should still show something rather than vanish.
+            bubble(text: message.text, isUser: false)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(message.segments) { segment in
+                    assistantBubble(segment)
+                }
+            }
+        }
+    }
+
     // Rounder, softer, tighter padding than a generic chat-UI bubble --
     // borrowing iMessage/WhatsApp's instinct that a message from a
     // person is compact and gently shaped, not a wide rectangular card.
-    @ViewBuilder
-    private func bubble(_ message: ChatMessage) -> some View {
+    private func bubble(text: String, isUser: Bool) -> some View {
         HStack {
-            if message.isUser { Spacer(minLength: 50) }
-            Text(message.text)
-                .foregroundStyle(message.isUser ? Theme.background : Theme.textPrimary)
+            if isUser { Spacer(minLength: 50) }
+            Text(text)
+                .foregroundStyle(isUser ? Theme.background : Theme.textPrimary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
-                    message.isUser ? Theme.accent : Theme.card,
+                    isUser ? Theme.accent : Theme.card,
                     in: RoundedRectangle(cornerRadius: 20)
                 )
-            if !message.isUser { Spacer(minLength: 50) }
+            if !isUser { Spacer(minLength: 50) }
+        }
+    }
+
+    // Head Coach gets a small, consistent marker (a dot, same every
+    // time) rather than a label -- per coach-voice.md they're the
+    // default, near-constant voice, so a named tag on every single
+    // bubble would just be noise. A specialist is the rare one, so it
+    // gets an explicit name and a slightly different card tone --
+    // enough to read as "someone else is talking" without a new color.
+    @ViewBuilder
+    private func assistantBubble(_ segment: MessageSegment) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                if !segment.isHeadCoach {
+                    Text(specialistLabel(segment.speaker))
+                        .font(.caption2.bold())
+                        .foregroundStyle(Theme.accent)
+                }
+                Text(segment.text)
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        segment.isHeadCoach ? Theme.card : Theme.cardElevated,
+                        in: RoundedRectangle(cornerRadius: 20)
+                    )
+            }
+            Spacer(minLength: 50)
+        }
+        .overlay(alignment: .topLeading) {
+            if segment.isHeadCoach {
+                Circle()
+                    .fill(Theme.accent)
+                    .frame(width: 6, height: 6)
+                    .offset(x: -3, y: 6)
+            }
+        }
+    }
+
+    private func specialistLabel(_ speaker: String) -> String {
+        switch speaker {
+        case "strength": return "STRENGTH"
+        case "endurance": return "ENDURANCE"
+        case "recovery": return "RECOVERY"
+        default: return speaker.uppercased()
         }
     }
 
@@ -217,29 +286,35 @@ struct ChatView: View {
     }
 
     private var messageBar: some View {
-        HStack(spacing: 8) {
-            TextField("Message the coach…", text: $viewModel.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .padding(10)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1...4)
-            PhotosPicker(selection: $viewModel.photoPickerItem, matching: .images) {
-                Image(systemName: "photo.on.rectangle")
-                    .font(.title3)
-                    .foregroundStyle(Theme.textSecondary)
-            }
+        VStack(spacing: 12) {
+            // Primary: the main way to talk to the coach.
             VoiceInputButton(text: $viewModel.draft)
-            Button {
-                Task { await viewModel.send() }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
+
+            // Secondary: typing stays fully available, just visually
+            // smaller now that voice leads.
+            HStack(spacing: 8) {
+                TextField("Or type…", text: $viewModel.draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.subheadline)
+                    .padding(9)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1...3)
+                PhotosPicker(selection: $viewModel.photoPickerItem, matching: .images) {
+                    Image(systemName: "photo.on.rectangle")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Button {
+                    Task { await viewModel.send() }
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title3)
+                }
+                .disabled(
+                    (viewModel.draft.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.hasAttachment)
+                    || viewModel.isSending
+                )
             }
-            .disabled(
-                (viewModel.draft.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.hasAttachment)
-                || viewModel.isSending
-            )
         }
         .padding()
         .background(Theme.background)

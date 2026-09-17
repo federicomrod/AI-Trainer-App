@@ -85,6 +85,7 @@ struct TodayView: View {
     @State private var showingLogSession = false
     @State private var showingGoals = false
     @State private var showingSettings = false
+    @State private var showingWhyDetail = false
 
     var body: some View {
         NavigationStack {
@@ -237,13 +238,38 @@ struct TodayView: View {
             }
         }
 
-        if let reply = response.reply {
-            // Bold, confident type for the one thing that matters on
-            // this screen -- the coach's actual call for today.
-            Text(reply)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
+        ForEach(Array(response.segments.enumerated()), id: \.offset) { index, segment in
+            if index == 0 {
+                // Bold, confident type for the one thing that matters
+                // on this screen -- the coach's actual call for today.
+                // Tappable: reveals the real inputs behind the call
+                // (soreness, this week's plan, recent load) rather
+                // than asking the athlete to just trust one line.
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showingWhyDetail.toggle()
+                    }
+                } label: {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(segment.text)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                        Image(systemName: showingWhyDetail ? "chevron.up" : "chevron.down")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.top, 4)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if showingWhyDetail {
+                    whyDetail(response.briefing)
+                }
+            } else {
+                specialistBlock(segment)
+            }
         }
 
         if let decision = response.decision,
@@ -251,6 +277,35 @@ struct TodayView: View {
            !decision.today.exercises.isEmpty {
             sessionCard(decision.today)
         }
+    }
+
+    // A specialist's own line, distinguished from Head Coach's by a
+    // small name label rather than a color -- same treatment as
+    // Coach chat, so the two screens read consistently.
+    private func specialistBlock(_ segment: MessageSegment) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(segment.speaker.uppercased())
+                .font(.caption2.bold())
+                .foregroundStyle(Theme.accent)
+            Text(segment.text)
+                .font(.subheadline)
+                .foregroundStyle(Theme.textPrimary)
+        }
+        .padding(.top, 2)
+    }
+
+    // The actual briefing text the model was given for this call --
+    // goals, recent sessions, this week's plan, current soreness and
+    // energy, tracked numbers, events, memory. Not a curated subset:
+    // the whole thing, so nothing relevant to "why" is quietly left
+    // out.
+    private func whyDetail(_ briefing: String) -> some View {
+        Text(briefing)
+            .font(.system(.footnote, design: .monospaced))
+            .foregroundStyle(Theme.textSecondary)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
     }
 
     @ViewBuilder
@@ -296,33 +351,38 @@ struct TodayView: View {
     }
 
     private var messageBar: some View {
-        HStack(spacing: 8) {
-            // Open-ended on purpose -- a bad night's sleep, a stressful
-            // week, travel, none of it is "fitness," but all of it
-            // changes what today should look like. Narrower copy here
-            // implicitly tells people not to bother mentioning it.
-            TextField("What's going on?", text: $viewModel.messageDraft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .padding(10)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1...4)
-            PhotosPicker(selection: $viewModel.photoPickerItem, matching: .images) {
-                Image(systemName: "photo.on.rectangle")
-                    .font(.title3)
-                    .foregroundStyle(Theme.textSecondary)
-            }
+        VStack(spacing: 12) {
+            // Primary: the main way to talk to the coach.
             VoiceInputButton(text: $viewModel.messageDraft)
-            Button {
-                Task { await viewModel.sendDraft() }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
+
+            // Secondary: typing stays fully available, just visually
+            // smaller now that voice leads. Open-ended copy on
+            // purpose -- a bad night's sleep, a stressful week,
+            // travel, none of it is "fitness," but all of it changes
+            // what today should look like.
+            HStack(spacing: 8) {
+                TextField("Or type: what's going on?", text: $viewModel.messageDraft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.subheadline)
+                    .padding(9)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1...3)
+                PhotosPicker(selection: $viewModel.photoPickerItem, matching: .images) {
+                    Image(systemName: "photo.on.rectangle")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Button {
+                    Task { await viewModel.sendDraft() }
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title3)
+                }
+                .disabled(
+                    (viewModel.messageDraft.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.hasAttachment)
+                    || viewModel.isLoading
+                )
             }
-            .disabled(
-                (viewModel.messageDraft.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.hasAttachment)
-                || viewModel.isLoading
-            )
         }
         .padding()
         .background(Theme.background)

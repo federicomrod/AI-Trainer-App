@@ -47,3 +47,42 @@ def render_reply(decision):
         lines.append(f"\n{decision['question']}")
 
     return "\n".join(l for l in lines if l)
+
+
+HEAD_COACH = "head_coach"
+
+
+def render_segments(decision):
+    """Same content as render_reply(), split into one segment per
+    speaker instead of flattened into a single string with inline
+    **Label:** markers. Lets the UI show each voice as its own message
+    -- a real specialist chiming in should look like someone else
+    speaking, not a bold heading in the middle of Head Coach's own
+    paragraph. render_reply() stays as the plain-text form (cli.py,
+    and anything else that just wants one block of text); this is an
+    additional view of the same decision, not a replacement."""
+    segments = []
+
+    head_lines = [decision.get("why", "").strip()]
+    for change in decision.get("plan_diff") or []:
+        head_lines.append(
+            f"{change.get('date')}: {change.get('from')} -> "
+            f"{change.get('to')} — {change.get('reason')}"
+        )
+    head_text = "\n".join(l for l in head_lines if l)
+    if head_text:
+        segments.append({"speaker": HEAD_COACH, "text": head_text})
+
+    notes = decision.get("specialist_notes") or []
+    if len(notes) > MAX_SPECIALISTS:
+        notes = notes[:MAX_SPECIALISTS]
+    for note in notes:
+        text = (note.get("text") or "").strip()
+        if not text:
+            continue
+        segments.append({"speaker": note.get("coach") or "coach", "text": text})
+
+    if decision.get("question"):
+        segments.append({"speaker": HEAD_COACH, "text": decision["question"]})
+
+    return segments

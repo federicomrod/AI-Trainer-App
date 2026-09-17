@@ -28,6 +28,11 @@ class TurnResult:
     safety_flagged: bool
     error: Optional[str] = None       # "planner_error" | "validation_error" | None
     error_detail: Optional[str] = None
+    segments: list = None             # [{"speaker": ..., "text": ...}, ...]
+
+    def __post_init__(self):
+        if self.segments is None:
+            self.segments = []
 
 
 def _fabricated_safety_decision():
@@ -66,6 +71,17 @@ def reply_text_for(decision):
     if decision.get("_precheck_only"):
         return safety.safety_response_text()
     return render.render_reply(decision)
+
+
+def segments_for(decision):
+    """The same reply as reply_text_for(), split by speaker -- see
+    render.render_segments(). Kept as a parallel function rather than
+    changing reply_text_for()'s return shape, since reply_text_for()
+    is also cli.py's plain-text path and nothing there needs to
+    change."""
+    if decision.get("_precheck_only"):
+        return [{"speaker": render.HEAD_COACH, "text": safety.safety_response_text()}]
+    return render.render_segments(decision)
 
 
 def _save_message(conn, role, content):
@@ -147,6 +163,7 @@ def run_turn(conn, message, image_base64=None):
         return TurnResult(
             briefing=briefing_text, decision=decision,
             reply=reply_text_for(decision), safety_flagged=True,
+            segments=segments_for(decision),
         )
 
     # --- The one model call. ---
@@ -183,6 +200,7 @@ def run_turn(conn, message, image_base64=None):
             return TurnResult(
                 briefing=briefing_text, decision=last,
                 reply=reply_text_for(last), safety_flagged=False,
+                segments=segments_for(last),
             )
 
     _save_message(conn, "assistant", json.dumps(decision))
@@ -190,4 +208,5 @@ def run_turn(conn, message, image_base64=None):
     return TurnResult(
         briefing=briefing_text, decision=decision,
         reply=reply_text_for(decision), safety_flagged=False,
+        segments=segments_for(decision),
     )

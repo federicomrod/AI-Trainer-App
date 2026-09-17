@@ -44,6 +44,11 @@ class TurnRequest(BaseModel):
     image_base64: Optional[str] = None
 
 
+class MessageSegment(BaseModel):
+    speaker: str
+    text: str
+
+
 class TurnResponse(BaseModel):
     briefing: str
     decision: Optional[dict]
@@ -51,6 +56,7 @@ class TurnResponse(BaseModel):
     safety_flagged: bool
     error: Optional[str]
     error_detail: Optional[str]
+    segments: List[MessageSegment] = []
 
 
 class ChatMessage(BaseModel):
@@ -58,6 +64,7 @@ class ChatMessage(BaseModel):
     role: str
     text: str
     timestamp: str
+    segments: List[MessageSegment] = []
 
 
 class CheckInRequest(BaseModel):
@@ -133,9 +140,22 @@ class WeeklySessionCount(BaseModel):
     count: int
 
 
+class LiftPR(BaseModel):
+    exercise_name: str
+    max_weight: float
+
+
+class ProgressStats(BaseModel):
+    lift_prs: List[LiftPR]
+    longest_ride_min: Optional[int]
+    longest_swim_min: Optional[int]
+    sessions_this_week: int
+
+
 class ProgressResponse(BaseModel):
     lifts: Dict[str, List[LiftPoint]]
     weekly_sessions: List[WeeklySessionCount]
+    stats: ProgressStats
 
 
 class HealthKitWorkout(BaseModel):
@@ -198,14 +218,17 @@ def get_messages():
     out = []
     for row in rows:
         text = row["content"]
+        segments = []
         if row["role"] == "assistant":
             try:
-                text = coach.reply_text_for(json.loads(row["content"]))
+                decision = json.loads(row["content"])
+                text = coach.reply_text_for(decision)
+                segments = coach.segments_for(decision)
             except (json.JSONDecodeError, TypeError):
                 pass
         out.append(ChatMessage(
             id=row["id"], role=row["role"], text=text,
-            timestamp=row["timestamp"],
+            timestamp=row["timestamp"], segments=segments,
         ))
     return out
 
@@ -310,4 +333,5 @@ def post_turn(req: TurnRequest):
         safety_flagged=result.safety_flagged,
         error=result.error,
         error_detail=result.error_detail,
+        segments=result.segments,
     )
