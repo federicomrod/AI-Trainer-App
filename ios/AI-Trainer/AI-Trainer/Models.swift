@@ -279,3 +279,31 @@ struct ProgressResponse: Decodable {
         case weeklySessions = "weekly_sessions"
     }
 }
+
+/// One workout read from HealthKit, on its way to POST
+/// /healthkit_import. `hkType` is the raw HKWorkoutActivityType name
+/// (see HealthKitManager) -- server/healthkit_import.py owns the
+/// mapping to a session type, so an unrecognized type is the server's
+/// call to skip, not this struct's.
+struct HealthKitWorkout: Encodable {
+    let date: String
+    let hkType: String
+    let durationMin: Int?
+    let summary: String?
+
+    enum CodingKeys: String, CodingKey {
+        case date
+        case hkType = "hk_type"
+        case durationMin = "duration_min"
+        case summary
+    }
+}
+
+struct HealthKitImportRequest: Encodable {
+    let workouts: [HealthKitWorkout]
+}
+
+struct HealthKitImportResponse: Decodable {
+    let imported: Int
+    let skipped: Int
+}

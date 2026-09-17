@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 import checkin as checkin_module
 import coach
+import healthkit_import
 import log_session
 import progress as progress_module
 import week as week_module
@@ -133,6 +134,22 @@ class WeeklySessionCount(BaseModel):
 class ProgressResponse(BaseModel):
     lifts: Dict[str, List[LiftPoint]]
     weekly_sessions: List[WeeklySessionCount]
+
+
+class HealthKitWorkout(BaseModel):
+    date: str
+    hk_type: str
+    duration_min: Optional[int] = None
+    summary: Optional[str] = None
+
+
+class HealthKitImportRequest(BaseModel):
+    workouts: List[HealthKitWorkout] = []
+
+
+class HealthKitImportResponse(BaseModel):
+    imported: int
+    skipped: int
 
 
 class WeekDay(BaseModel):
@@ -265,6 +282,18 @@ def get_progress():
     scores, no streaks. See progress.py."""
     conn = get_connection()
     return progress_module.get_progress(conn)
+
+
+@app.post("/healthkit_import", response_model=HealthKitImportResponse)
+def post_healthkit_import(req: HealthKitImportRequest):
+    """Import recent Apple Health workouts (Garmin/Whoop/Watch, since
+    those write into HealthKit rather than exposing their own API --
+    see CLAUDE.md's tech decisions). See healthkit_import.py for what
+    gets imported vs. skipped."""
+    conn = get_connection()
+    return healthkit_import.import_workouts(
+        conn, [w.model_dump() for w in req.workouts]
+    )
 
 
 @app.post("/turn", response_model=TurnResponse)

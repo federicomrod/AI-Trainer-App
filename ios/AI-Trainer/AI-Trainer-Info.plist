@@ -38,5 +38,13 @@
 	<string>AI Trainer turns your voice into a message for the coach, entirely on your device.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>AI Trainer needs the microphone to hear your voice message for the coach.</string>
+	<!--
+	HealthKit (CLAUDE.md: read-only, minimum categories -- workouts
+	only, since that's what Garmin/Whoop/Watch write into Health and
+	it's the one thing this app actually uses: filling in sessions on
+	days nothing was planned or logged).
+	-->
+	<key>NSHealthShareUsageDescription</key>
+	<string>AI Trainer reads your recent workouts from Health so runs, rides and swims from your watch show up automatically.</string>
 </dict>
 </plist>

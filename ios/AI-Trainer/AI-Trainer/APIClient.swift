@@ -103,6 +103,16 @@ struct APIClient {
         return try await send(request, decoding: ProgressResponse.self)
     }
 
+    /// Hand recent HealthKit workouts to the server. Only fills days
+    /// with no session at all -- see server/healthkit_import.py.
+    func importHealthKitWorkouts(_ workouts: [HealthKitWorkout]) async throws -> HealthKitImportResponse {
+        try await post(
+            "healthkit_import",
+            body: HealthKitImportRequest(workouts: workouts),
+            decoding: HealthKitImportResponse.self
+        )
+    }
+
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
