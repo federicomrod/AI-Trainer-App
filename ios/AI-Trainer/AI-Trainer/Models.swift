@@ -108,3 +108,35 @@ struct ChatMessage: Codable, Identifiable {
 
     var isUser: Bool { role == "user" }
 }
+
+/// One day in the current week, from GET /week. `type`/`plannedSummary`
+/// are what was originally scheduled -- sessions rows are never
+/// rewritten when a decision changes the plan (see server/coach.py and
+/// server/week.py), so a non-nil `movedTo` is the marker that this day
+/// no longer matches what's shown here, and why.
+struct WeekDay: Codable, Identifiable {
+    let date: String
+    let weekday: String
+    let isToday: Bool
+    let type: String
+    let status: String
+    let plannedSummary: String?
+    let actualSummary: String?
+    let durationMin: Int?
+    let movedTo: String?
+    let movedReason: String?
+
+    var id: String { date }
+    var moved: Bool { movedTo != nil }
+
+    enum CodingKeys: String, CodingKey {
+        case date, weekday
+        case isToday = "is_today"
+        case type, status
+        case plannedSummary = "planned_summary"
+        case actualSummary = "actual_summary"
+        case durationMin = "duration_min"
+        case movedTo = "moved_to"
+        case movedReason = "moved_reason"
+    }
+}

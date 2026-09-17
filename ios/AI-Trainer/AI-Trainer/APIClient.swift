@@ -56,6 +56,12 @@ struct APIClient {
         return try await send(request, decoding: [ChatMessage].self)
     }
 
+    /// The current calendar week, for Week view.
+    func fetchWeek() async throws -> [WeekDay] {
+        let request = URLRequest(url: Self.baseURL.appendingPathComponent("week"))
+        return try await send(request, decoding: [WeekDay].self)
+    }
+
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -69,5 +75,17 @@ struct APIClient {
         } catch {
             throw APIError.decoding(error)
         }
+    }
+
+    /// Shared helper for the POST-with-JSON-body endpoints (check-in,
+    /// post-workout logging, goals) still to come.
+    func post<Body: Encodable, Response: Decodable>(
+        _ path: String, body: Body, decoding: Response.Type
+    ) async throws -> Response {
+        var request = URLRequest(url: Self.baseURL.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        return try await send(request, decoding: decoding)
     }
 }

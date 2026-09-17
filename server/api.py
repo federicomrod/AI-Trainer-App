@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 import coach
+import week as week_module
 from briefing import build_briefing
 from db import get_connection
 
@@ -51,6 +52,19 @@ class ChatMessage(BaseModel):
     role: str
     text: str
     timestamp: str
+
+
+class WeekDay(BaseModel):
+    date: str
+    weekday: str
+    is_today: bool
+    type: str
+    status: str
+    planned_summary: Optional[str]
+    actual_summary: Optional[str]
+    duration_min: Optional[int]
+    moved_to: Optional[str]
+    moved_reason: Optional[str]
 
 
 @app.get("/health")
@@ -94,6 +108,14 @@ def get_messages():
             timestamp=row["timestamp"],
         ))
     return out
+
+
+@app.get("/week", response_model=List[WeekDay])
+def get_week():
+    """The current calendar week (Mon-Sun), every session tagged with
+    whether a decision moved it and why. See week.py."""
+    conn = get_connection()
+    return week_module.get_week(conn)
 
 
 @app.post("/turn", response_model=TurnResponse)
