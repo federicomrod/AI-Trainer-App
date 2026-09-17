@@ -33,7 +33,7 @@ struct APIClient {
     /// the same Wi-Fi -- including this one, or the Mac mini, or
     /// wherever the backend gets deployed next. Update this when that
     /// address changes; it isn't discovered automatically.
-    static var baseURL = URL(string: "http://192.168.0.129:8000")!
+    static var baseURL = URL(string: "http://192.168.0.193:8000")!
 
     private let session = URLSession.shared
 
