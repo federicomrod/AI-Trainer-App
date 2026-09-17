@@ -75,6 +75,54 @@ def _save_message(conn, role, content):
     conn.commit()
 
 
+def _last_assistant_decision_today(conn):
+    """The most recently saved assistant decision from today, if any
+    -- used to tell a genuinely new call apart from the athlete just
+    reopening the app with nothing new to say."""
+    row = conn.execute(
+        "SELECT content FROM messages WHERE role = 'assistant' "
+        "AND date(timestamp) = date('now') ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["content"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+SESSION_TYPES = ["push", "pull", "legs", "ride", "run", "swim", "intervals", "rest"]
+
+
+def _canonical_type(type_str):
+    """`today.type` isn't constrained to CLAUDE.md's fixed vocabulary
+    at the schema level, so the model sometimes writes "swim" and
+    sometimes "swim -- easy aerobic" for the identical call. Match on
+    whichever canonical word appears, so that cosmetic phrasing doesn't
+    defeat the same-call check below."""
+    lowered = (type_str or "").lower()
+    for canonical in SESSION_TYPES:
+        if canonical in lowered:
+            return canonical
+    return lowered
+
+
+def _same_call(a, b):
+    """True when two decisions amount to the same call for today --
+    same decision, same session, no plan changes on either side. Not
+    a byte-for-byte compare: `why` is free prose from the model and
+    varies every time even when nothing about the actual call did."""
+    if a.get("decision") != b.get("decision"):
+        return False
+    if (a.get("plan_diff") or []) or (b.get("plan_diff") or []):
+        return False
+    a_today, b_today = a.get("today") or {}, b.get("today") or {}
+    return (
+        _canonical_type(a_today.get("type")) == _canonical_type(b_today.get("type"))
+        and a_today.get("duration_min") == b_today.get("duration_min")
+    )
+
+
 def run_turn(conn, message, image_base64=None):
     """Run one full turn of the core loop for `message` (may be empty
     -- "just tell me today") and an optional screenshot
@@ -120,6 +168,22 @@ def run_turn(conn, message, image_base64=None):
             briefing=briefing_text, decision=decision, reply=None,
             safety_flagged=False, error="validation_error", error_detail=str(e),
         )
+
+    # A silent check (no new message, no screenshot -- Today's own
+    # "just tell me today" load) that lands on the same call already
+    # shown today isn't a new exchange, it's the athlete reopening the
+    # app. Per coach-voice.md ("never repeat... only today changed"),
+    # that gets the existing line again, not a fresh near-duplicate
+    # message stacked into the conversation every time the screen
+    # loads. A real message or screenshot always gets a genuine saved
+    # reply, even when the call itself doesn't change.
+    if not message and not image_base64:
+        last = _last_assistant_decision_today(conn)
+        if last is not None and _same_call(decision, last):
+            return TurnResult(
+                briefing=briefing_text, decision=last,
+                reply=reply_text_for(last), safety_flagged=False,
+            )
 
     _save_message(conn, "assistant", json.dumps(decision))
 
