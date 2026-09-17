@@ -21,13 +21,15 @@ more than that.
 """
 
 import json
+from datetime import date as date_type
 from typing import Dict, List, Literal, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 import checkin as checkin_module
 import coach
+import log_session
 import week as week_module
 from briefing import build_briefing
 from db import get_connection
@@ -69,6 +71,44 @@ class CheckInResponse(BaseModel):
     energy: int
     soreness: Dict[str, str]
     note: Optional[str]
+
+
+class RelevantExercise(BaseModel):
+    name: str
+    last_date: Optional[str]
+    last_weight: Optional[float]
+    last_reps: Optional[int]
+    last_sets: Optional[int]
+
+
+class LogContextResponse(BaseModel):
+    date: str
+    type: str
+    status: str
+    planned_summary: Optional[str]
+    relevant_exercises: List[RelevantExercise]
+
+
+class LiftEntry(BaseModel):
+    exercise_name: str
+    weight: Optional[float] = None
+    reps: Optional[int] = None
+    sets: Optional[int] = None
+    note: Optional[str] = None
+
+
+class LogSessionRequest(BaseModel):
+    date: Optional[str] = None  # defaults to today, server-side
+    status: Literal["done", "partial", "skipped"]
+    notes: Optional[str] = None
+    lifts: List[LiftEntry] = []
+
+
+class LogSessionResponse(BaseModel):
+    date: str
+    type: str
+    status: str
+    actual_summary: Optional[str]
 
 
 class WeekDay(BaseModel):
@@ -142,6 +182,33 @@ def post_checkin(req: CheckInRequest):
     return checkin_module.save_checkin(
         conn, req.sleep, req.energy, req.soreness, req.note
     )
+
+
+@app.get("/log_context", response_model=LogContextResponse)
+def get_log_context(date: Optional[str] = None):
+    """What the logging screen needs: the scheduled type/summary for
+    `date` (defaults to today) and which tracked exercises, if any,
+    are worth prompting for. See log_session.py."""
+    conn = get_connection()
+    context = log_session.get_log_context(conn, date)
+    if context is None:
+        raise HTTPException(404, f"No session scheduled for {date or 'today'}")
+    return context
+
+
+@app.post("/log_session", response_model=LogSessionResponse)
+def post_log_session(req: LogSessionRequest):
+    """Record what actually happened: done/partial/skipped, optional
+    notes, and any tracked-exercise numbers the athlete gave."""
+    conn = get_connection()
+    try:
+        return log_session.save_log(
+            conn, req.date or date_type.today().isoformat(),
+            req.status, req.notes,
+            [lift.model_dump() for lift in req.lifts],
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 @app.post("/turn", response_model=TurnResponse)

@@ -159,3 +159,74 @@ struct CheckInResponse: Decodable {
     let soreness: [String: String]
     let note: String?
 }
+
+/// One tracked exercise worth prompting for on the logging screen,
+/// with its most recent numbers for context (e.g. "last time: 100kg
+/// x3x5"). Only ever appears when the session's type plausibly
+/// matches it -- see server/log_session.py's TYPE_KEYWORDS.
+struct RelevantExercise: Decodable, Identifiable {
+    let name: String
+    let lastDate: String?
+    let lastWeight: Double?
+    let lastReps: Int?
+    let lastSets: Int?
+
+    var id: String { name }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case lastDate = "last_date"
+        case lastWeight = "last_weight"
+        case lastReps = "last_reps"
+        case lastSets = "last_sets"
+    }
+}
+
+struct LogContextResponse: Decodable {
+    let date: String
+    let type: String
+    let status: String
+    let plannedSummary: String?
+    let relevantExercises: [RelevantExercise]
+
+    enum CodingKeys: String, CodingKey {
+        case date, type, status
+        case plannedSummary = "planned_summary"
+        case relevantExercises = "relevant_exercises"
+    }
+}
+
+/// One tracked-exercise number entered on the logging screen. `weight`
+/// etc. are all optional -- an exercise the athlete skips just isn't
+/// included in the submitted array at all.
+struct LiftEntry: Encodable {
+    let exerciseName: String
+    let weight: Double?
+    let reps: Int?
+    let sets: Int?
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case exerciseName = "exercise_name"
+        case weight, reps, sets, note
+    }
+}
+
+struct LogSessionRequest: Encodable {
+    let date: String?  // nil = today, resolved server-side
+    let status: String  // "done" | "partial" | "skipped"
+    let notes: String?
+    let lifts: [LiftEntry]
+}
+
+struct LogSessionResponse: Decodable {
+    let date: String
+    let type: String
+    let status: String
+    let actualSummary: String?
+
+    enum CodingKeys: String, CodingKey {
+        case date, type, status
+        case actualSummary = "actual_summary"
+    }
+}

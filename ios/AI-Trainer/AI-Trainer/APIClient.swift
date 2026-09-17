@@ -67,6 +67,24 @@ struct APIClient {
         try await post("checkin", body: body, decoding: CheckInResponse.self)
     }
 
+    /// What the logging screen needs for `date` (nil = today).
+    func fetchLogContext(date: String? = nil) async throws -> LogContextResponse {
+        var components = URLComponents(
+            url: Self.baseURL.appendingPathComponent("log_context"),
+            resolvingAgainstBaseURL: false
+        )!
+        if let date {
+            components.queryItems = [URLQueryItem(name: "date", value: date)]
+        }
+        let request = URLRequest(url: components.url!)
+        return try await send(request, decoding: LogContextResponse.self)
+    }
+
+    /// Record what actually happened for a session.
+    func submitLog(_ body: LogSessionRequest) async throws -> LogSessionResponse {
+        try await post("log_session", body: body, decoding: LogSessionResponse.self)
+    }
+
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {

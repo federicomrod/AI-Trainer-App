@@ -57,6 +57,7 @@ final class TodayViewModel: ObservableObject {
 struct TodayView: View {
     @StateObject private var viewModel = TodayViewModel()
     @State private var showingCheckIn = false
+    @State private var showingLogSession = false
 
     var body: some View {
         NavigationStack {
@@ -71,6 +72,13 @@ struct TodayView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        showingLogSession = true
+                    } label: {
+                        Label("Log Session", systemImage: "square.and.pencil")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
                         showingCheckIn = true
                     } label: {
                         Label("Check In", systemImage: "checkmark.circle")
@@ -79,6 +87,9 @@ struct TodayView: View {
             }
             .sheet(isPresented: $showingCheckIn) {
                 CheckInView()
+            }
+            .sheet(isPresented: $showingLogSession) {
+                LogSessionView()
             }
             .safeAreaInset(edge: .bottom) { messageBar }
             .task {
@@ -189,7 +200,11 @@ struct TodayView: View {
 
     private var messageBar: some View {
         HStack(spacing: 8) {
-            TextField("Tell the coach something…", text: $viewModel.messageDraft, axis: .vertical)
+            // Open-ended on purpose -- a bad night's sleep, a stressful
+            // week, travel, none of it is "fitness," but all of it
+            // changes what today should look like. Narrower copy here
+            // implicitly tells people not to bother mentioning it.
+            TextField("What's going on?", text: $viewModel.messageDraft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...4)
             VoiceInputButton(text: $viewModel.messageDraft)
