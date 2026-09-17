@@ -69,6 +69,8 @@ struct TodayView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .background(Theme.background)
+            .scrollContentBackground(.hidden)
             .navigationTitle("Today")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -129,10 +131,10 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Couldn't reach the coach", systemImage: "wifi.exclamationmark")
                 .font(.headline)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Theme.textPrimary)
             Text(message)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
             Button("Try again") {
                 Task { await viewModel.loadToday() }
             }
@@ -143,22 +145,30 @@ struct TodayView: View {
 
     @ViewBuilder
     private func decisionContent(_ response: TurnResponse) -> some View {
+        // The decision itself is the hero of this screen -- the one
+        // thing the accent color gets spent on here. Every decision
+        // gets the same treatment regardless of KEEP/MODIFY/REST:
+        // color-coding "which decision" would read as a status score,
+        // which this app deliberately doesn't do anywhere.
         if let decision = response.decision {
             HStack {
                 Text(decision.decision)
                     .font(.caption.bold())
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(badgeColor(decision.decision).opacity(0.15))
-                    .foregroundStyle(badgeColor(decision.decision))
+                    .background(Theme.accent.opacity(0.18))
+                    .foregroundStyle(Theme.accent)
                     .clipShape(Capsule())
                 Spacer()
             }
         }
 
         if let reply = response.reply {
+            // Bold, confident type for the one thing that matters on
+            // this screen -- the coach's actual call for today.
             Text(reply)
-                .font(.body)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
 
@@ -175,30 +185,32 @@ struct TodayView: View {
             HStack {
                 Text(session.type.replacingOccurrences(of: "_", with: " ").capitalized)
                     .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Text("\(session.durationMin) min")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             }
             if !session.intensityNote.isEmpty {
                 Text(session.intensityNote)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             }
-            Divider()
+            Divider().overlay(Theme.textSecondary.opacity(0.2))
             ForEach(session.exercises) { exercise in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(exercise.name)
                             .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Theme.textPrimary)
                         Spacer()
                         Text("\(exercise.sets) x \(exercise.reps)")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                     }
                     if let note = exercise.note, !note.isEmpty {
                         Text(note)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                     }
                 }
                 .padding(.vertical, 2)
@@ -206,7 +218,7 @@ struct TodayView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
     }
 
     private var messageBar: some View {
@@ -216,7 +228,10 @@ struct TodayView: View {
             // changes what today should look like. Narrower copy here
             // implicitly tells people not to bother mentioning it.
             TextField("What's going on?", text: $viewModel.messageDraft, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+                .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1...4)
             VoiceInputButton(text: $viewModel.messageDraft)
             Button {
@@ -231,16 +246,7 @@ struct TodayView: View {
             )
         }
         .padding()
-        .background(.bar)
-    }
-
-    private func badgeColor(_ decision: String) -> Color {
-        switch decision {
-        case "KEEP": return .green
-        case "MODIFY": return .orange
-        case "REST": return .blue
-        default: return .gray
-        }
+        .background(Theme.background)
     }
 }
 

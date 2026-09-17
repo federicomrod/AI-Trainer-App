@@ -21,6 +21,8 @@ struct AI_TrainerApp: App {
                 ChatView()
                     .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right") }
             }
+            .tint(Theme.accent)
+            .preferredColorScheme(.dark)
         }
     }
 }

@@ -90,12 +90,14 @@ struct ChatView: View {
                         if let error = viewModel.errorMessage {
                             Text(error)
                                 .font(.footnote)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Theme.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .padding()
                 }
+                .scrollContentBackground(.hidden)
+                .background(Theme.background)
                 .onChange(of: viewModel.messages.count) {
                     scrollToBottom(proxy)
                 }
@@ -120,19 +122,22 @@ struct ChatView: View {
         }
     }
 
+    // Rounder, softer, tighter padding than a generic chat-UI bubble --
+    // borrowing iMessage/WhatsApp's instinct that a message from a
+    // person is compact and gently shaped, not a wide rectangular card.
     @ViewBuilder
     private func bubble(_ message: ChatMessage) -> some View {
         HStack {
-            if message.isUser { Spacer(minLength: 40) }
+            if message.isUser { Spacer(minLength: 50) }
             Text(message.text)
+                .foregroundStyle(message.isUser ? Theme.background : Theme.textPrimary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
-                    message.isUser ? Color.accentColor : Color(.secondarySystemBackground),
-                    in: RoundedRectangle(cornerRadius: 16)
+                    message.isUser ? Theme.accent : Theme.card,
+                    in: RoundedRectangle(cornerRadius: 20)
                 )
-                .foregroundStyle(message.isUser ? .white : .primary)
-            if !message.isUser { Spacer(minLength: 40) }
+            if !message.isUser { Spacer(minLength: 50) }
         }
     }
 
@@ -141,7 +146,7 @@ struct ChatView: View {
             ProgressView()
             Text("Coach is thinking…")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
             Spacer()
         }
     }
@@ -149,7 +154,10 @@ struct ChatView: View {
     private var messageBar: some View {
         HStack(spacing: 8) {
             TextField("Message the coach…", text: $viewModel.draft, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+                .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1...4)
             VoiceInputButton(text: $viewModel.draft)
             Button {
@@ -164,7 +172,7 @@ struct ChatView: View {
             )
         }
         .padding()
-        .background(.bar)
+        .background(Theme.background)
     }
 }
 

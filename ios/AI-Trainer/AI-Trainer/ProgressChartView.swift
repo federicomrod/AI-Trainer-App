@@ -44,7 +44,7 @@ struct ProgressChartView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let error = viewModel.errorMessage, viewModel.progress == nil {
                     VStack(spacing: 12) {
-                        Text(error).foregroundStyle(.secondary)
+                        Text(error).foregroundStyle(Theme.textSecondary)
                         Button("Try again") { Task { await viewModel.load() } }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -54,6 +54,7 @@ struct ProgressChartView: View {
                     Color.clear
                 }
             }
+            .background(Theme.background)
             .navigationTitle("Progress")
             .task { await viewModel.load() }
             .refreshable { await viewModel.load() }
@@ -69,7 +70,7 @@ struct ProgressChartView: View {
                 let sortedExercises = progress.lifts.keys.sorted()
                 if sortedExercises.isEmpty {
                     Text("Nothing tracked yet — numbers you log for an exercise show up here.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                 } else {
                     ForEach(sortedExercises, id: \.self) { name in
                         if let points = progress.lifts[name], !points.isEmpty {
@@ -83,17 +84,31 @@ struct ProgressChartView: View {
         }
     }
 
+    // One accent, spent on the line/bar itself -- no per-series color
+    // cycling, no red/green thresholds on the axis. The chart already
+    // is the hero of this screen; it doesn't need decoration on top.
     private func weeklySessionsSection(_ counts: [WeeklySessionCount]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Sessions per week")
                 .font(.headline)
+                .foregroundStyle(Theme.textPrimary)
             Chart(counts) { point in
                 BarMark(
                     x: .value("Week", point.weekStartValue, unit: .weekOfYear),
                     y: .value("Sessions", point.count)
                 )
+                .foregroundStyle(Theme.accent)
+                .cornerRadius(4)
             }
             .frame(height: 160)
+            .chartXAxis { AxisMarks(values: .automatic) { _ in
+                AxisGridLine().foregroundStyle(Theme.textSecondary.opacity(0.25))
+                AxisValueLabel().foregroundStyle(Theme.textSecondary)
+            } }
+            .chartYAxis { AxisMarks { _ in
+                AxisGridLine().foregroundStyle(Theme.textSecondary.opacity(0.25))
+                AxisValueLabel().foregroundStyle(Theme.textSecondary)
+            } }
         }
     }
 
@@ -101,18 +116,28 @@ struct ProgressChartView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(name)
                 .font(.headline)
+                .foregroundStyle(Theme.textPrimary)
             Chart(points) { point in
                 LineMark(
                     x: .value("Date", point.dateValue),
                     y: .value("Weight", point.weight)
                 )
+                .foregroundStyle(Theme.accent)
                 .symbol(.circle)
             }
             .frame(height: 160)
+            .chartXAxis { AxisMarks(values: .automatic) { _ in
+                AxisGridLine().foregroundStyle(Theme.textSecondary.opacity(0.25))
+                AxisValueLabel().foregroundStyle(Theme.textSecondary)
+            } }
+            .chartYAxis { AxisMarks { _ in
+                AxisGridLine().foregroundStyle(Theme.textSecondary.opacity(0.25))
+                AxisValueLabel().foregroundStyle(Theme.textSecondary)
+            } }
             if let last = points.last {
                 Text("Last: \(formattedWeight(last.weight))kg on \(last.date)")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
     }
