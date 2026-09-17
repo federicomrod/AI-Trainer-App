@@ -111,6 +111,14 @@ class LogSessionResponse(BaseModel):
     actual_summary: Optional[str]
 
 
+class GoalsResponse(BaseModel):
+    goals: List[str]
+
+
+class GoalsRequest(BaseModel):
+    goals: List[str]
+
+
 class WeekDay(BaseModel):
     date: str
     weekday: str
@@ -209,6 +217,30 @@ def post_log_session(req: LogSessionRequest):
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+@app.get("/goals", response_model=GoalsResponse)
+def get_goals():
+    """Goals in priority order (list order = priority -- see
+    CLAUDE.md's profile table: no separate priority field)."""
+    conn = get_connection()
+    row = conn.execute("SELECT goals_json FROM profile WHERE id = 1").fetchone()
+    return {"goals": json.loads(row["goals_json"]) if row else []}
+
+
+@app.put("/goals", response_model=GoalsResponse)
+def put_goals(req: GoalsRequest):
+    """Replace the goals list wholesale, in the given order. The
+    client sends the full reordered/edited list rather than a
+    move/insert/delete op -- simplest possible contract for a screen
+    that's just "view and edit a list"."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE profile SET goals_json = ? WHERE id = 1",
+        (json.dumps(req.goals),),
+    )
+    conn.commit()
+    return {"goals": req.goals}
 
 
 @app.post("/turn", response_model=TurnResponse)

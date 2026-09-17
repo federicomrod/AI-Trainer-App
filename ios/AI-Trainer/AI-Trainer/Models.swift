@@ -230,3 +230,9 @@ struct LogSessionResponse: Decodable {
         case actualSummary = "actual_summary"
     }
 }
+
+/// GET/PUT /goals. List order IS priority order -- CLAUDE.md's profile
+/// table has no separate priority field, first = highest priority.
+struct GoalsPayload: Codable {
+    let goals: [String]
+}

@@ -85,6 +85,17 @@ struct APIClient {
         try await post("log_session", body: body, decoding: LogSessionResponse.self)
     }
 
+    /// Goals, in priority order (list order = priority).
+    func fetchGoals() async throws -> GoalsPayload {
+        let request = URLRequest(url: Self.baseURL.appendingPathComponent("goals"))
+        return try await send(request, decoding: GoalsPayload.self)
+    }
+
+    /// Replace the goals list wholesale, in the given order.
+    func saveGoals(_ goals: [String]) async throws -> GoalsPayload {
+        try await put("goals", body: GoalsPayload(goals: goals), decoding: GoalsPayload.self)
+    }
+
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -101,12 +112,26 @@ struct APIClient {
     }
 
     /// Shared helper for the POST-with-JSON-body endpoints (check-in,
-    /// post-workout logging, goals) still to come.
+    /// post-workout logging).
     func post<Body: Encodable, Response: Decodable>(
         _ path: String, body: Body, decoding: Response.Type
     ) async throws -> Response {
+        try await withBody("POST", path, body: body, decoding: decoding)
+    }
+
+    /// Shared helper for PUT-with-JSON-body endpoints (goals: replace
+    /// the whole list, not a partial update).
+    func put<Body: Encodable, Response: Decodable>(
+        _ path: String, body: Body, decoding: Response.Type
+    ) async throws -> Response {
+        try await withBody("PUT", path, body: body, decoding: decoding)
+    }
+
+    private func withBody<Body: Encodable, Response: Decodable>(
+        _ method: String, _ path: String, body: Body, decoding: Response.Type
+    ) async throws -> Response {
         var request = URLRequest(url: Self.baseURL.appendingPathComponent(path))
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
         return try await send(request, decoding: decoding)

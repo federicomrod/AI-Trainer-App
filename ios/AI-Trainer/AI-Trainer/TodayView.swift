@@ -58,6 +58,7 @@ struct TodayView: View {
     @StateObject private var viewModel = TodayViewModel()
     @State private var showingCheckIn = false
     @State private var showingLogSession = false
+    @State private var showingGoals = false
 
     var body: some View {
         NavigationStack {
@@ -84,12 +85,22 @@ struct TodayView: View {
                         Label("Check In", systemImage: "checkmark.circle")
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingGoals = true
+                    } label: {
+                        Label("Goals", systemImage: "target")
+                    }
+                }
             }
             .sheet(isPresented: $showingCheckIn) {
                 CheckInView()
             }
             .sheet(isPresented: $showingLogSession) {
                 LogSessionView()
+            }
+            .sheet(isPresented: $showingGoals) {
+                GoalsView()
             }
             .safeAreaInset(edge: .bottom) { messageBar }
             .task {
