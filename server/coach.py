@@ -11,11 +11,13 @@ quietly drift apart.
 
 import json
 from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 import planner
 import render
 import safety
+import session_note_parser
 import validation
 from briefing import build_briefing
 
@@ -91,6 +93,23 @@ def _save_message(conn, role, content):
     conn.commit()
 
 
+def _attach_session_note(conn, message):
+    """If this message clearly refers to a specific *other* day's
+    session, write a short note onto that session's own `notes` column
+    -- a real schema field that, before this, nothing ever wrote to.
+    Without this, mentioning "Tuesday's run felt off" in chat was only
+    ever visible by scrolling chat history; now Week view's day detail
+    can show it directly. Best-effort: see session_note_parser.py."""
+    found = session_note_parser.parse_session_note(conn, message, date.today().isoformat())
+    if found is None:
+        return
+    conn.execute(
+        "UPDATE sessions SET notes = ? WHERE date = ?",
+        (found["note"], found["date"]),
+    )
+    conn.commit()
+
+
 def _last_assistant_decision_today(conn):
     """The most recently saved assistant decision from today, if any
     -- used to tell a genuinely new call apart from the athlete just
@@ -154,6 +173,8 @@ def run_turn(conn, message, image_base64=None):
         # directly" implies no separate image store. Anything from it
         # worth keeping comes back through memory_to_add instead.
         _save_message(conn, "user", message or "(shared a screenshot)")
+        if message:
+            _attach_session_note(conn, message)
 
     # --- Hard safety pre-check. Runs before anything else, and skips
     # the model call entirely if it trips. ---

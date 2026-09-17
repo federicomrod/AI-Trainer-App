@@ -66,10 +66,21 @@ struct WeekView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(viewModel.days) { day in
-                                DayCard(
-                                    day: day,
-                                    isPast: referenceDate.map { day.date < $0 } ?? false
-                                )
+                                // Value-based navigation, not
+                                // NavigationLink(destination:) --
+                                // the closure form reliably showed the
+                                // *previous* row's day after pushing a
+                                // second one in testing (SwiftUI
+                                // reusing destination view identity
+                                // across rows). Pushing by value forces
+                                // a fresh destination per distinct date.
+                                NavigationLink(value: day.date) {
+                                    DayCard(
+                                        day: day,
+                                        isPast: referenceDate.map { day.date < $0 } ?? false
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding()
@@ -77,8 +88,11 @@ struct WeekView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
-            .background(Theme.background)
+            .appBackground()
             .navigationTitle("This Week")
+            .navigationDestination(for: String.self) { date in
+                DayDetailView(date: date)
+            }
             .task { await viewModel.load() }
             .refreshable { await viewModel.load() }
         }
@@ -97,77 +111,81 @@ private struct DayCard: View {
     private var isQuiet: Bool { isPast && !day.isToday }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isQuiet ? 4 : 6) {
-            HStack {
-                Text("\(day.weekday) · \(shortDate(day.date))")
-                    .font(isQuiet ? .footnote.weight(.medium) : .subheadline.weight(.semibold))
-                    .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
-                if day.isToday {
-                    // Today is the hero of this list -- the one place
-                    // on this screen the accent earns its keep.
-                    Text("TODAY")
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Theme.accent.opacity(0.18))
-                        .foregroundStyle(Theme.accent)
-                        .clipShape(Capsule())
-                }
-                Spacer()
-                StatusTag(status: day.status, isQuiet: isQuiet)
-            }
+        HStack(alignment: .top, spacing: 12) {
+            // Consistent with Today's session card -- the same icon
+            // for the same type, so a session's kind reads at a
+            // glance without parsing the label.
+            Image(systemName: SessionTypeIcon.symbolName(for: day.type))
+                .font(day.isToday ? .title2 : .body)
+                .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.accent)
+                .frame(width: day.isToday ? 30 : 24)
+                .padding(.top, 2)
 
-            if day.moved {
-                // Same accent as everywhere else, not a separate
-                // ad-hoc color -- this marks "something changed here,"
-                // not a status judgment on the day.
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .foregroundStyle(Theme.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(displayType(day.type)) → \(day.movedTo ?? "")")
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(Theme.textPrimary)
-                        if let reason = day.movedReason, !reason.isEmpty {
-                            Text(reason)
-                                .font(.caption)
-                                .foregroundStyle(Theme.textSecondary)
+            VStack(alignment: .leading, spacing: isQuiet ? 4 : 6) {
+                HStack {
+                    Text("\(day.weekday) · \(shortDate(day.date))")
+                        .font(Theme.rounded(isQuiet ? .footnote : .subheadline, weight: .semibold))
+                        .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
+                    if day.isToday {
+                        // Today is the hero of this list -- the one
+                        // place on this screen the accent earns its
+                        // keep.
+                        Text("TODAY")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Theme.accent.opacity(0.18))
+                            .foregroundStyle(Theme.accent)
+                            .clipShape(Capsule())
+                    }
+                    Spacer()
+                    StatusTag(status: day.status, isQuiet: isQuiet)
+                }
+
+                if day.moved {
+                    // Same accent as everywhere else, not a separate
+                    // ad-hoc color -- this marks "something changed
+                    // here," not a status judgment on the day.
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .foregroundStyle(Theme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(displayType(day.type)) → \(day.movedTo ?? "")")
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(Theme.textPrimary)
+                            if let reason = day.movedReason, !reason.isEmpty {
+                                Text(reason)
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
                         }
                     }
+                    .padding(8)
+                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                } else {
+                    Text(displayType(day.type))
+                        .font(day.isToday ? Theme.rounded(.title3, weight: .bold) : .callout.weight(.medium))
+                        .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
                 }
-                .padding(8)
-                .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-            } else {
-                Text(displayType(day.type))
-                    .font(day.isToday ? .title3.weight(.bold) : .callout.weight(.medium))
-                    .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
-            }
 
-            if let summary = summaryText(for: day) {
-                Text(summary)
-                    .font(.footnote)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(isQuiet ? 1 : nil)
-            }
+                if let summary = summaryText(for: day) {
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(isQuiet ? 1 : nil)
+                }
 
-            if let duration = day.durationMin {
-                Text("\(duration) min")
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
+                if let duration = day.durationMin {
+                    Text("\(duration) min")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
             }
         }
         .padding(.horizontal, day.isToday ? 18 : 14)
         .padding(.vertical, isQuiet ? 10 : (day.isToday ? 18 : 14))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            day.isToday ? Theme.cardElevated : Theme.card,
-            in: RoundedRectangle(cornerRadius: Theme.cardRadius)
-        )
-        .opacity(isQuiet ? 0.72 : 1.0)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cardRadius)
-                .strokeBorder(day.isToday ? Theme.accent : .clear, lineWidth: 2)
-        )
+        .modifier(DayCardBackground(isToday: day.isToday, isQuiet: isQuiet))
     }
 
     private func summaryText(for day: WeekDay) -> String? {
@@ -212,6 +230,31 @@ private struct StatusTag: View {
                 status == "planned" || isQuiet ? Theme.textSecondary : Theme.textPrimary
             )
             .clipShape(Capsule())
+    }
+}
+
+/// Real elevation on today specifically (gradient fill, soft shadow,
+/// the accent border it already had); a quiet, flatter, lower-
+/// contrast card for anything already finished; the plain flat card
+/// in between for what's still ahead this week.
+private struct DayCardBackground: ViewModifier {
+    let isToday: Bool
+    let isQuiet: Bool
+
+    func body(content: Content) -> some View {
+        Group {
+            if isToday {
+                content.heroCard()
+            } else if isQuiet {
+                content.quietCard()
+            } else {
+                content.flatCard()
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: isToday ? Theme.heroCardRadius : Theme.cardRadius)
+                .strokeBorder(isToday ? Theme.accent : .clear, lineWidth: 2)
+        )
     }
 }
 

@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 @main
 struct AI_TrainerApp: App {
@@ -16,6 +19,27 @@ struct AI_TrainerApp: App {
     // Bonjour browse only if that fails -- never the 60-second hang a
     // stale address would otherwise cause on the very first screen.
     @State private var backendReady = false
+
+    init() {
+        #if os(iOS)
+        // Screen titles ("Today", "This Week", "Progress", "Coach")
+        // are UIKit nav-bar text, not SwiftUI Text -- this is the one
+        // way to actually restyle them. SF Rounded on both the large
+        // and standard title, matching Theme.rounded() everywhere else
+        // a "header" is drawn in SwiftUI directly.
+        let largeDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .largeTitle)
+            .withDesign(.rounded)?
+            .withSymbolicTraits(.traitBold) ?? UIFontDescriptor.preferredFontDescriptor(withTextStyle: .largeTitle)
+        let titleDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .headline)
+            .withDesign(.rounded) ?? UIFontDescriptor.preferredFontDescriptor(withTextStyle: .headline)
+        UINavigationBar.appearance().largeTitleTextAttributes = [
+            .font: UIFont(descriptor: largeDescriptor, size: largeDescriptor.pointSize)
+        ]
+        UINavigationBar.appearance().titleTextAttributes = [
+            .font: UIFont(descriptor: titleDescriptor, size: titleDescriptor.pointSize)
+        ]
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -35,7 +59,7 @@ struct AI_TrainerApp: App {
                     ProgressView()
                         .tint(Theme.accent)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Theme.background)
+                        .appBackground()
                         .task {
                             APIClient.baseURL = await ServerDiscovery.resolveBaseURL(
                                 candidate: APIClient.baseURL

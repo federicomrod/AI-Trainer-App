@@ -125,7 +125,7 @@ struct ChatView: View {
                     .padding()
                 }
                 .scrollContentBackground(.hidden)
-                .background(Theme.background)
+                .appBackground()
                 .onChange(of: viewModel.messages.count) {
                     scrollToBottom(proxy)
                 }
@@ -176,7 +176,7 @@ struct ChatView: View {
             }
             .padding(.horizontal)
             .padding(.top, 10)
-            .background(Theme.background)
+            .appBackground()
         }
         #endif
     }
@@ -230,21 +230,20 @@ struct ChatView: View {
         }
     }
 
-    // Head Coach gets a small, consistent marker (a dot, same every
-    // time) rather than a label -- per coach-voice.md they're the
-    // default, near-constant voice, so a named tag on every single
-    // bubble would just be noise. A specialist is the rare one, so it
-    // gets an explicit name and a slightly different card tone --
-    // enough to read as "someone else is talking" without a new color.
+    // Every speaker gets the same treatment now: a small icon + name
+    // (SpeakerStyle, per coach-voice.md's cast), consistent every time
+    // that voice appears -- the previous tiny dot for Head Coach read
+    // as barely-there. A specialist's bubble also gets a slightly
+    // different card tone and a colored left-edge bar, so a multi-
+    // voice moment reads as someone else chiming in at a glance, not
+    // just a smaller caption above the same-looking bubble.
     @ViewBuilder
     private func assistantBubble(_ segment: MessageSegment) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
-                if !segment.isHeadCoach {
-                    Text(specialistLabel(segment.speaker))
-                        .font(.caption2.bold())
-                        .foregroundStyle(Theme.accent)
-                }
+                Label(SpeakerStyle.label(for: segment.speaker).uppercased(), systemImage: SpeakerStyle.icon(for: segment.speaker))
+                    .font(.caption2.bold())
+                    .foregroundStyle(Theme.accent)
                 Text(segment.text)
                     .foregroundStyle(Theme.textPrimary)
                     .padding(.horizontal, 14)
@@ -253,25 +252,16 @@ struct ChatView: View {
                         segment.isHeadCoach ? Theme.card : Theme.cardElevated,
                         in: RoundedRectangle(cornerRadius: 20)
                     )
+                    .overlay(alignment: .leading) {
+                        if !segment.isHeadCoach {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Theme.accent)
+                                .frame(width: 3)
+                                .padding(.vertical, 6)
+                        }
+                    }
             }
             Spacer(minLength: 50)
-        }
-        .overlay(alignment: .topLeading) {
-            if segment.isHeadCoach {
-                Circle()
-                    .fill(Theme.accent)
-                    .frame(width: 6, height: 6)
-                    .offset(x: -3, y: 6)
-            }
-        }
-    }
-
-    private func specialistLabel(_ speaker: String) -> String {
-        switch speaker {
-        case "strength": return "STRENGTH"
-        case "endurance": return "ENDURANCE"
-        case "recovery": return "RECOVERY"
-        default: return speaker.uppercased()
         }
     }
 
@@ -317,7 +307,7 @@ struct ChatView: View {
             }
         }
         .padding()
-        .background(Theme.background)
+        .appBackground()
     }
 }
 

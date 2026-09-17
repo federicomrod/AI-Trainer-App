@@ -169,6 +169,65 @@ struct WeekDay: Codable, Identifiable {
     }
 }
 
+/// One logged lift within a day's detail, from GET /day.
+struct DayLift: Decodable, Identifiable {
+    let exerciseName: String
+    let weight: Double?
+    let reps: Int?
+    let sets: Int?
+    let note: String?
+
+    var id: String { "\(exerciseName)-\(weight ?? 0)-\(reps ?? 0)-\(sets ?? 0)" }
+
+    enum CodingKeys: String, CodingKey {
+        case exerciseName = "exercise_name"
+        case weight, reps, sets, note
+    }
+}
+
+/// That day's check-in, within GET /day's detail.
+struct DayCheckIn: Decodable {
+    let sleep: String?
+    let energy: Int?
+    let soreness: [String: String]
+    let painFlag: Bool
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case sleep, energy, soreness
+        case painFlag = "pain_flag"
+        case note
+    }
+}
+
+/// Everything on record for one calendar day -- Week view's tap-to-
+/// open detail. `chatNote` is sessions.notes: a note the coach
+/// attached because the athlete mentioned this specific day in chat
+/// (see server/session_note_parser.py), distinct from `actualSummary`
+/// (the structured post-workout log).
+struct DayDetailResponse: Decodable {
+    let date: String
+    let type: String?
+    let status: String?
+    let plannedSummary: String?
+    let actualSummary: String?
+    let durationMin: Int?
+    let rpe: Double?
+    let chatNote: String?
+    let lifts: [DayLift]
+    let checkin: DayCheckIn?
+
+    enum CodingKeys: String, CodingKey {
+        case date, type, status
+        case plannedSummary = "planned_summary"
+        case actualSummary = "actual_summary"
+        case durationMin = "duration_min"
+        case rpe
+        case chatNote = "chat_note"
+        case lifts, checkin
+    }
+}
+
 /// POST /checkin's body. One check-in per calendar day -- submitting
 /// again today updates that day's row server-side (see
 /// server/checkin.py) rather than creating a duplicate.

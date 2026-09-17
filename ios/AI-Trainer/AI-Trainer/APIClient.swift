@@ -71,6 +71,18 @@ struct APIClient {
         return try await send(request, decoding: [WeekDay].self)
     }
 
+    /// Everything on record for one calendar day, for Week view's
+    /// tap-to-open detail.
+    func fetchDay(date: String) async throws -> DayDetailResponse {
+        var components = URLComponents(
+            url: Self.baseURL.appendingPathComponent("day"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "date", value: date)]
+        let request = URLRequest(url: components.url!)
+        return try await send(request, decoding: DayDetailResponse.self)
+    }
+
     /// Save (or update) today's check-in.
     func submitCheckIn(_ body: CheckInRequest) async throws -> CheckInResponse {
         try await post("checkin", body: body, decoding: CheckInResponse.self)

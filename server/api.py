@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 
 import checkin as checkin_module
 import coach
+import day_detail
 import discovery
 import healthkit_import
 import log_session
@@ -204,6 +205,35 @@ class WeekDay(BaseModel):
     moved_reason: Optional[str]
 
 
+class DayLift(BaseModel):
+    exercise_name: str
+    weight: Optional[float]
+    reps: Optional[int]
+    sets: Optional[int]
+    note: Optional[str]
+
+
+class DayCheckIn(BaseModel):
+    sleep: Optional[str]
+    energy: Optional[int]
+    soreness: Dict[str, str]
+    pain_flag: bool
+    note: Optional[str]
+
+
+class DayDetailResponse(BaseModel):
+    date: str
+    type: Optional[str]
+    status: Optional[str]
+    planned_summary: Optional[str]
+    actual_summary: Optional[str]
+    duration_min: Optional[int]
+    rpe: Optional[float]
+    chat_note: Optional[str]
+    lifts: List[DayLift]
+    checkin: Optional[DayCheckIn]
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -256,6 +286,17 @@ def get_week():
     whether a decision moved it and why. See week.py."""
     conn = get_connection()
     return week_module.get_week(conn)
+
+
+@app.get("/day", response_model=DayDetailResponse)
+def get_day(date: str):
+    """Everything on record for one calendar day -- Week view's
+    tap-to-open detail. See day_detail.py."""
+    conn = get_connection()
+    detail = day_detail.get_day_detail(conn, date)
+    if detail is None:
+        raise HTTPException(404, f"Nothing on record for {date}")
+    return detail
 
 
 @app.post("/checkin", response_model=CheckInResponse)

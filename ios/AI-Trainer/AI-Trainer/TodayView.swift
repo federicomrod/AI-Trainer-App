@@ -96,7 +96,7 @@ struct TodayView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(Theme.background)
+            .appBackground()
             .scrollContentBackground(.hidden)
             .navigationTitle("Today")
             .toolbar {
@@ -183,7 +183,7 @@ struct TodayView: View {
             }
             .padding(.horizontal)
             .padding(.top, 10)
-            .background(Theme.background)
+            .appBackground()
         }
         #endif
     }
@@ -252,7 +252,7 @@ struct TodayView: View {
                 } label: {
                     HStack(alignment: .top, spacing: 8) {
                         Text(segment.text)
-                            .font(.title3.weight(.semibold))
+                            .font(Theme.rounded(.title3, weight: .semibold))
                             .foregroundStyle(Theme.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.leading)
@@ -279,12 +279,13 @@ struct TodayView: View {
         }
     }
 
-    // A specialist's own line, distinguished from Head Coach's by a
-    // small name label rather than a color -- same treatment as
-    // Coach chat, so the two screens read consistently.
+    // A specialist's own line, distinguished from Head Coach's by its
+    // own icon + name (SpeakerStyle, per coach-voice.md's cast) rather
+    // than a color -- same treatment as Coach chat, so the two screens
+    // read consistently.
     private func specialistBlock(_ segment: MessageSegment) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(segment.speaker.uppercased())
+            Label(SpeakerStyle.label(for: segment.speaker).uppercased(), systemImage: SpeakerStyle.icon(for: segment.speaker))
                 .font(.caption2.bold())
                 .foregroundStyle(Theme.accent)
             Text(segment.text)
@@ -305,15 +306,18 @@ struct TodayView: View {
             .foregroundStyle(Theme.textSecondary)
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
+            .flatCard()
     }
 
     @ViewBuilder
     private func sessionCard(_ session: TodaySession) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
+                Image(systemName: SessionTypeIcon.symbolName(for: session.type))
+                    .font(.title3)
+                    .foregroundStyle(Theme.accent)
                 Text(session.type.replacingOccurrences(of: "_", with: " ").capitalized)
-                    .font(.headline)
+                    .font(Theme.rounded(.headline, weight: .bold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Text("\(session.durationMin) min")
@@ -347,7 +351,7 @@ struct TodayView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
+        .heroCard()
     }
 
     private var messageBar: some View {
@@ -385,7 +389,7 @@ struct TodayView: View {
             }
         }
         .padding()
-        .background(Theme.background)
+        .appBackground()
     }
 }
 
