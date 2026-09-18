@@ -1,0 +1,6 @@
+# The app's dependencies live in server/requirements.txt. This file
+# exists so a host can detect a Python project from the repository
+# root, which the deploy has to use: CLAUDE.md keeps the coach prompts
+# in /prompts, outside the server package, and a build rooted at
+# server/ leaves them out of the image entirely.
+-r server/requirements.txt
