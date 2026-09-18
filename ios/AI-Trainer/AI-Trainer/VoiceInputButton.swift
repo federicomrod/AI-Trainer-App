@@ -19,32 +19,58 @@ struct VoiceInputButton: View {
     @StateObject private var recognizer = SpeechRecognizer()
 
     private let diameter: CGFloat = 72
+    private let cancelDiameter: CGFloat = 44
 
     var body: some View {
-        Button {
-            recognizer.toggleRecording()
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(recognizer.isRecording ? Color.red.opacity(0.85) : Theme.accent)
-                    .frame(width: diameter, height: diameter)
-                    .shadow(
-                        color: (recognizer.isRecording ? Color.red : Theme.accent).opacity(0.35),
-                        radius: 14, y: 4
-                    )
-                Image(systemName: recognizer.isRecording ? "waveform" : "mic.fill")
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundStyle(Theme.background)
+        HStack(spacing: 16) {
+            if recognizer.isRecording {
+                // Discards the recording and transcript entirely --
+                // separate from the mic button, which finishes/sends.
+                // Appears only while recording, so there's never a
+                // moment it could be mistaken for the main control.
+                Button {
+                    recognizer.cancel()
+                    text = ""
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Theme.card)
+                            .frame(width: cancelDiameter, height: cancelDiameter)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .transition(.scale.combined(with: .opacity))
             }
+
+            Button {
+                recognizer.toggleRecording()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(recognizer.isRecording ? Color.red.opacity(0.85) : Theme.accent)
+                        .frame(width: diameter, height: diameter)
+                        .shadow(
+                            color: (recognizer.isRecording ? Color.red : Theme.accent).opacity(0.35),
+                            radius: 14, y: 4
+                        )
+                    Image(systemName: recognizer.isRecording ? "waveform" : "mic.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Theme.background)
+                }
+            }
+            .buttonStyle(.plain)
+            .scaleEffect(recognizer.isRecording ? 1.05 : 1.0)
+            .animation(
+                recognizer.isRecording
+                    ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true)
+                    : .easeOut(duration: 0.2),
+                value: recognizer.isRecording
+            )
         }
-        .buttonStyle(.plain)
-        .scaleEffect(recognizer.isRecording ? 1.05 : 1.0)
-        .animation(
-            recognizer.isRecording
-                ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true)
-                : .easeOut(duration: 0.2),
-            value: recognizer.isRecording
-        )
+        .animation(.easeOut(duration: 0.15), value: recognizer.isRecording)
         .onChange(of: recognizer.transcript) {
             if recognizer.isRecording {
                 text = recognizer.transcript
