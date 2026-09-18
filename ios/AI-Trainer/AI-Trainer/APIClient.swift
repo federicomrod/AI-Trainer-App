@@ -14,6 +14,12 @@ enum APIError: Error, LocalizedError {
     case badResponse
     case http(Int)
     case decoding(Error)
+    /// Nothing answered at any address we know about.
+    case unreachable(host: String)
+    /// Something answered, but not before the deadline. Distinct from
+    /// unreachable on purpose: the backend is there, it was just slow,
+    /// and retrying is genuinely worth a try.
+    case timedOut
 
     var errorDescription: String? {
         switch self {
@@ -23,58 +29,84 @@ enum APIError: Error, LocalizedError {
             return "Server error (HTTP \(code))."
         case .decoding(let error):
             return "Couldn't read the server's response: \(error.localizedDescription)"
+        case .unreachable(let host):
+            return "Can't reach the coach at \(host). It may be asleep, "
+                + "or on a different network than this phone."
+        case .timedOut:
+            return "The coach took too long to answer."
         }
     }
 }
 
 struct APIClient {
-    /// Wherever the backend is actually running. Starts from whatever
-    /// ServerDiscovery last confirmed via Bonjour, or this address as
-    /// a last-resort fallback (only matters on a first-ever launch,
-    /// before any discovery has ever succeeded, or if Bonjour is
-    /// somehow unavailable) -- AI_TrainerApp resolves this for real at
-    /// launch via ServerDiscovery.resolveBaseURL() before any screen
-    /// makes its own request, so this hardcoded value going stale is
-    /// no longer the problem it used to be.
-    static var baseURL = ServerDiscovery.cachedURL
-        ?? URL(string: "http://192.168.0.193:8000")!
+    /// Where requests actually go. Starts at the configured address
+    /// (Config.backendURL -- the one place it's written down) and is
+    /// replaced at launch by whichever address ServerDiscovery
+    /// confirms is live.
+    static var baseURL = Config.backendURL
 
-    private let session = URLSession.shared
+    /// Own session rather than URLSession.shared so the timeout is a
+    /// property of the client itself -- a request that somehow skips
+    /// the builders below is still bounded rather than inheriting the
+    /// system default of 60 seconds.
+    private let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = Config.requestTimeout
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Every request is built through here or `withBody` below, so the
+    /// timeout is applied in one place instead of being remembered at
+    /// each call site.
+    private static func request(
+        _ path: String,
+        query: [URLQueryItem]? = nil,
+        timeout: TimeInterval = Config.requestTimeout
+    ) -> URLRequest {
+        var url = baseURL.appendingPathComponent(path)
+        if let query, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.queryItems = query
+            url = components.url ?? url
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        return request
+    }
 
     /// `imageBase64` is an optional screenshot (CLAUDE.md: "send the
     /// image to the model directly" -- no separate vision step or
     /// upload endpoint).
     func turn(message: String, imageBase64: String? = nil) async throws -> TurnResponse {
-        var request = URLRequest(url: Self.baseURL.appendingPathComponent("turn"))
+        // The one request that waits on a real model call, so it gets
+        // Config.coachTurnTimeout rather than the ordinary ceiling --
+        // still bounded, so the thinking indicator always resolves.
+        var request = Self.request("turn", timeout: Config.coachTurnTimeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
             TurnRequestBody(message: message, imageBase64: imageBase64)
         )
-        // The model call itself can take a while (gpt-5 does real
-        // reasoning before answering) -- give it real room before
-        // URLSession times the request out from under it.
-        request.timeoutInterval = 60
         return try await send(request, decoding: TurnResponse.self)
     }
 
     /// The full conversation so far, for Coach chat. Each row's `text`
     /// is already final display text -- see ChatMessage's doc comment.
     func fetchHistory() async throws -> [ChatMessage] {
-        let request = URLRequest(url: Self.baseURL.appendingPathComponent("messages"))
+        let request = Self.request("messages")
         return try await send(request, decoding: [ChatMessage].self)
     }
 
     /// The current calendar week, for Week view.
     func fetchWeek() async throws -> [WeekDay] {
-        let request = URLRequest(url: Self.baseURL.appendingPathComponent("week"))
+        let request = Self.request("week")
         return try await send(request, decoding: [WeekDay].self)
     }
 
     /// Whether this athlete has been set up yet. A nil profile is what
     /// sends the app to onboarding instead of the tabs.
     func fetchProfile() async throws -> ProfileResponse {
-        let request = URLRequest(url: Self.baseURL.appendingPathComponent("profile"))
+        let request = Self.request("profile")
         return try await send(request, decoding: ProfileResponse.self)
     }
 
@@ -88,19 +120,14 @@ struct APIClient {
     /// a user-facing screen; see TodayView's whyDetail() for what the
     /// athlete actually sees when they tap "why".
     func fetchBriefingDebug() async throws -> BriefingDebugResponse {
-        let request = URLRequest(url: Self.baseURL.appendingPathComponent("briefing"))
+        let request = Self.request("briefing")
         return try await send(request, decoding: BriefingDebugResponse.self)
     }
 
     /// Everything on record for one calendar day, for Week view's
     /// tap-to-open detail.
     func fetchDay(date: String) async throws -> DayDetailResponse {
-        var components = URLComponents(
-            url: Self.baseURL.appendingPathComponent("day"),
-            resolvingAgainstBaseURL: false
-        )!
-        components.queryItems = [URLQueryItem(name: "date", value: date)]
-        let request = URLRequest(url: components.url!)
+        let request = Self.request("day", query: [URLQueryItem(name: "date", value: date)])
         return try await send(request, decoding: DayDetailResponse.self)
     }
 
@@ -111,14 +138,10 @@ struct APIClient {
 
     /// What the logging screen needs for `date` (nil = today).
     func fetchLogContext(date: String? = nil) async throws -> LogContextResponse {
-        var components = URLComponents(
-            url: Self.baseURL.appendingPathComponent("log_context"),
-            resolvingAgainstBaseURL: false
-        )!
-        if let date {
-            components.queryItems = [URLQueryItem(name: "date", value: date)]
-        }
-        let request = URLRequest(url: components.url!)
+        let request = Self.request(
+            "log_context",
+            query: date.map { [URLQueryItem(name: "date", value: $0)] }
+        )
         return try await send(request, decoding: LogContextResponse.self)
     }
 
@@ -129,7 +152,7 @@ struct APIClient {
 
     /// Goals, in priority order (list order = priority).
     func fetchGoals() async throws -> GoalsPayload {
-        let request = URLRequest(url: Self.baseURL.appendingPathComponent("goals"))
+        let request = Self.request("goals")
         return try await send(request, decoding: GoalsPayload.self)
     }
 
@@ -141,7 +164,7 @@ struct APIClient {
     /// Real trend data for Progress view: lift weight-over-time series
     /// and weekly completed-session counts.
     func fetchProgress() async throws -> ProgressResponse {
-        let request = URLRequest(url: Self.baseURL.appendingPathComponent("progress"))
+        let request = Self.request("progress")
         return try await send(request, decoding: ProgressResponse.self)
     }
 
@@ -162,16 +185,37 @@ struct APIClient {
     /// someone notices and edits baseURL by hand.
     private func send<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
         do {
-            return try await perform(request, decoding: type)
+            let value = try await perform(request, decoding: type)
+            await ConnectionState.shared.markOnline(Self.baseURL)
+            return value
+        } catch let error as URLError where error.code == .timedOut {
+            // Reached something, it just didn't answer in time. Not an
+            // offline condition -- don't send the whole app into the
+            // offline path over one slow reply.
+            throw APIError.timedOut
         } catch let error as URLError where Self.isConnectivityError(error) {
-            guard let rediscovered = await ServerDiscovery.discover(),
-                  rediscovered != Self.baseURL
-            else {
-                throw error
+            if let rediscovered = await ServerDiscovery.discover(),
+               rediscovered != Self.baseURL {
+                Self.baseURL = rediscovered
+                do {
+                    let value = try await perform(
+                        Self.rebase(request, to: rediscovered), decoding: type
+                    )
+                    await ConnectionState.shared.markOnline(rediscovered)
+                    return value
+                } catch {
+                    await ConnectionState.shared.markOffline()
+                    throw APIError.unreachable(host: Self.hostLabel)
+                }
             }
-            Self.baseURL = rediscovered
-            return try await perform(Self.rebase(request, to: rediscovered), decoding: type)
+            await ConnectionState.shared.markOffline()
+            throw APIError.unreachable(host: Self.hostLabel)
         }
+    }
+
+    /// The address to name in an error, without the scheme/port noise.
+    private static var hostLabel: String {
+        baseURL.host ?? baseURL.absoluteString
     }
 
     private func perform<T: Decodable>(_ request: URLRequest, decoding type: T.Type) async throws -> T {
@@ -192,7 +236,10 @@ struct APIClient {
     private static func isConnectivityError(_ error: URLError) -> Bool {
         switch error.code {
         case .cannotConnectToHost, .timedOut, .networkConnectionLost,
-             .cannotFindHost, .notConnectedToInternet:
+             .cannotFindHost, .notConnectedToInternet,
+             // A .local hostname that mDNS can't resolve surfaces here
+             // -- the mini being asleep looks exactly like this.
+             .dnsLookupFailed:
             return true
         default:
             return false
@@ -233,7 +280,7 @@ struct APIClient {
     private func withBody<Body: Encodable, Response: Decodable>(
         _ method: String, _ path: String, body: Body, decoding: Response.Type
     ) async throws -> Response {
-        var request = URLRequest(url: Self.baseURL.appendingPathComponent(path))
+        var request = Self.request(path)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)

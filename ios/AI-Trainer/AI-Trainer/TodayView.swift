@@ -20,6 +20,14 @@ final class TodayViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var messageDraft = ""
     @Published var pendingMessage: String?
+    /// The message whose turn failed, kept so it can be retried.
+    @Published var failedMessage: String?
+
+    func retryFailedSend() async {
+        let message = failedMessage ?? ""
+        failedMessage = nil
+        await send(message: message)
+    }
     @Published var photoPickerItem: PhotosPickerItem?
     #if os(iOS)
     @Published var attachedImage: UIImage?
@@ -58,6 +66,24 @@ final class TodayViewModel: ObservableObject {
         await send(message: text, imageBase64: imageBase64)
     }
 
+    /// True when what's on screen came from the cache rather than the
+    /// backend just now.
+    @Published var isShowingCached = false
+    @Published var cachedAt: Date?
+
+    /// Opening screen when the backend is known to be unreachable: show
+    /// the remembered decision immediately rather than spending a
+    /// timeout rediscovering that it's still down.
+    func loadCachedIfOffline() -> Bool {
+        guard ConnectionState.shared.isOffline,
+              let cached = Cache.load(TurnResponse.self, for: .today)
+        else { return false }
+        response = cached
+        cachedAt = Cache.savedAt(.today)
+        isShowingCached = true
+        return true
+    }
+
     private func send(message: String, imageBase64: String? = nil) async {
         isLoading = true
         errorMessage = nil
@@ -68,6 +94,7 @@ final class TodayViewModel: ObservableObject {
         // having sent nothing.
         pendingMessage = message.isEmpty ? nil : message
         defer { pendingMessage = nil }
+        failedMessage = nil
         do {
             let result = try await client.turn(message: message, imageBase64: imageBase64)
             response = result
@@ -79,9 +106,26 @@ final class TodayViewModel: ObservableObject {
             // show as "today's plan".
             if let backendError = result.error {
                 errorMessage = result.errorDetail ?? backendError
+            } else {
+                // Only remember a decision that's actually usable --
+                // caching an error would mean opening to it tomorrow.
+                Cache.save(result, for: .today)
+                isShowingCached = false
+                cachedAt = nil
             }
         } catch {
             errorMessage = error.localizedDescription
+            // Hold on to what they said so Retry can resend it. Without
+            // this a failed turn loses the message: the thinking
+            // indicator just disappears and there's nothing to press.
+            failedMessage = message
+            // Fall back to the last good decision rather than leaving
+            // the screen empty behind an error.
+            if response == nil, let cached = Cache.load(TurnResponse.self, for: .today) {
+                response = cached
+                cachedAt = Cache.savedAt(.today)
+                isShowingCached = true
+            }
         }
         isLoading = false
     }
@@ -99,6 +143,11 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    if viewModel.isShowingCached {
+                        OfflineBanner(savedAt: viewModel.cachedAt) {
+                            Task { await viewModel.loadToday() }
+                        }
+                    }
                     content
                 }
                 .padding()
@@ -152,12 +201,13 @@ struct TodayView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 0) {
                     sendingBanner
+                    sendFailedBanner
                     attachmentPreview
                     messageBar
                 }
             }
             .task {
-                if viewModel.response == nil {
+                if viewModel.response == nil, !viewModel.loadCachedIfOffline() {
                     await viewModel.loadToday()
                 }
             }
@@ -190,6 +240,36 @@ struct TodayView: View {
                         .lineLimit(3)
                 }
                 Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+            .padding(.top, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .appBackground()
+        }
+    }
+
+    // A turn that failed while an earlier decision is still on screen
+    // would otherwise be invisible: content shows the old decision, so
+    // errorContent never renders, and the thinking indicator simply
+    // vanishes. That's the "hangs forever" complaint wearing a
+    // different hat -- this is the bounded, retryable end of it.
+    @ViewBuilder
+    private var sendFailedBanner: some View {
+        if !viewModel.isLoading, viewModel.response != nil,
+           let message = viewModel.errorMessage {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.accent)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer(minLength: 0)
+                Button("Retry") {
+                    Task { await viewModel.retryFailedSend() }
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.accent)
             }
             .padding(.horizontal)
             .padding(.top, 10)

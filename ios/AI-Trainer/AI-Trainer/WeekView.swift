@@ -17,16 +17,39 @@ final class WeekViewModel: ObservableObject {
     @Published var days: [WeekDay] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var isShowingCached = false
+    @Published var cachedAt: Date?
 
     private let client = APIClient()
+
+    /// Show the remembered week straight away when the backend is
+    /// already known to be down, instead of waiting out a timeout to
+    /// learn the same thing.
+    func loadCachedIfOffline() -> Bool {
+        guard ConnectionState.shared.isOffline,
+              let cached = Cache.load([WeekDay].self, for: .week)
+        else { return false }
+        days = cached
+        cachedAt = Cache.savedAt(.week)
+        isShowingCached = true
+        return true
+    }
 
     func load() async {
         isLoading = true
         errorMessage = nil
         do {
             days = try await client.fetchWeek()
+            Cache.save(days, for: .week)
+            isShowingCached = false
+            cachedAt = nil
         } catch {
             errorMessage = error.localizedDescription
+            if days.isEmpty, let cached = Cache.load([WeekDay].self, for: .week) {
+                days = cached
+                cachedAt = Cache.savedAt(.week)
+                isShowingCached = true
+            }
         }
         isLoading = false
     }
@@ -65,6 +88,11 @@ struct WeekView: View {
                     let referenceDate = viewModel.days.first(where: { $0.isToday })?.date
                     ScrollView {
                         LazyVStack(spacing: 12) {
+                            if viewModel.isShowingCached {
+                                OfflineBanner(savedAt: viewModel.cachedAt) {
+                                    Task { await viewModel.load() }
+                                }
+                            }
                             ForEach(viewModel.days) { day in
                                 // Value-based navigation, not
                                 // NavigationLink(destination:) --
@@ -93,7 +121,11 @@ struct WeekView: View {
             .navigationDestination(for: String.self) { date in
                 DayDetailView(date: date)
             }
-            .task { await viewModel.load() }
+            .task {
+                if !viewModel.loadCachedIfOffline() {
+                    await viewModel.load()
+                }
+            }
             .refreshable { await viewModel.load() }
         }
     }

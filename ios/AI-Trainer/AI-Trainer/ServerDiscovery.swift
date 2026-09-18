@@ -49,29 +49,55 @@ enum ServerDiscovery {
     }
 
     /// Call once at launch, before any screen makes its own request.
-    /// Confirms `candidate` (the cached or built-in address) actually
-    /// answers within a couple seconds; if it doesn't, falls back to a
-    /// real Bonjour browse. Never throws, never blocks longer than
-    /// roughly `quickTimeout + discoveryTimeout` in the worst case.
-    static func resolveBaseURL(
-        candidate: URL, quickTimeout: TimeInterval = 1.5, discoveryTimeout: TimeInterval = 4.0
-    ) async -> URL {
-        if await isReachable(candidate, timeout: quickTimeout) {
-            return candidate
+    /// Works down the list of places the backend could be and returns
+    /// the first that actually answers, or nil if none do -- nil is
+    /// what puts the app into offline/error handling rather than
+    /// letting every screen discover the same dead address one slow
+    /// timeout at a time.
+    ///
+    /// Configured address first, deliberately: it's the stated answer
+    /// to "where is the backend", and a stale cached address should
+    /// never win over it. Each step is individually short, so the
+    /// whole chain fails in seconds rather than minutes.
+    static func resolveBaseURL() async -> URL? {
+        var tried: [URL] = [Config.backendURL, Config.fallbackBackendURL]
+        // Last confirmed address, in case the server is somewhere
+        // neither hostname covers.
+        if let cached = cachedURL, !tried.contains(cached) {
+            tried.append(cached)
         }
-        return await discover(timeout: discoveryTimeout) ?? candidate
+
+        for url in tried {
+            if await isLiveBackend(url, timeout: Config.reachabilityProbeTimeout) {
+                cache(url)
+                return url
+            }
+        }
+        return await discover()
     }
 
-    /// A short, cheap /health hit -- just "does anything answer here,"
-    /// not a real request. Kept separate from APIClient so this file
-    /// has no dependency on it (APIClient's baseURL is what's *being*
-    /// resolved here).
-    private static func isReachable(_ url: URL, timeout: TimeInterval) async -> Bool {
-        var request = URLRequest(url: url.appendingPathComponent("health"))
+    /// Does a *working, current* backend live at this address?
+    ///
+    /// Deliberately not /health. An older copy of this server left
+    /// running on another machine still answers /health with 200 while
+    /// failing every request that matters -- and because the probe
+    /// passed, the app bound to it and showed "Server error (HTTP 500)"
+    /// on every screen instead of moving on to a machine that worked.
+    /// So the probe hits a real endpoint and insists on decoding the
+    /// real response: a 500, a 404 from a version that predates it, or
+    /// anything that isn't this API all correctly fail here and let the
+    /// next candidate have a turn.
+    ///
+    /// Kept independent of APIClient, whose baseURL is the thing being
+    /// resolved.
+    private static func isLiveBackend(_ url: URL, timeout: TimeInterval) async -> Bool {
+        var request = URLRequest(url: url.appendingPathComponent("profile"))
         request.timeoutInterval = timeout
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
+            _ = try JSONDecoder().decode(ProfileResponse.self, from: data)
+            return true
         } catch {
             return false
         }
