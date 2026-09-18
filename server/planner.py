@@ -130,7 +130,26 @@ DECISION_SCHEMA = {
 }
 
 
+def prompts_available():
+    """Whether the coach's prompts are actually on disk. Reported by
+    /config_check, because their absence is invisible until a decision
+    is asked for."""
+    return PLANNER_PROMPT_PATH.exists() and COACH_VOICE_PATH.exists()
+
+
 def _load_system_prompt():
+    # CLAUDE.md keeps these in /prompts at the repo root, deliberately
+    # outside the server package so they stay editable as documents
+    # rather than code. That means a deploy has to include the whole
+    # repository, not just server/ -- when it doesn't, this is where it
+    # shows up, and an unwrapped FileNotFoundError surfaced as a bare
+    # HTTP 500 that pointed nowhere near the cause.
+    if not prompts_available():
+        raise PlannerError(
+            f"Coach prompts not found at {PROMPTS_DIR}. The deployment "
+            f"needs the whole repository, not just the server folder -- "
+            f"check the host's root-directory setting."
+        )
     planner_prompt = PLANNER_PROMPT_PATH.read_text()
     coach_voice = COACH_VOICE_PATH.read_text()
     return (

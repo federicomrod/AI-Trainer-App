@@ -39,6 +39,7 @@ import discovery
 import healthkit_import
 import log_session
 import onboarding as onboarding_module
+import planner
 import progress as progress_module
 import week as week_module
 from briefing import build_briefing
@@ -342,6 +343,8 @@ def config_check():
         "database_path": str(DB_PATH),
         "database_exists": Path(DB_PATH).exists(),
         "access_key_required": bool(API_KEY),
+        "prompts_path": str(planner.PROMPTS_DIR),
+        "prompts_found": planner.prompts_available(),
     }
 
 
