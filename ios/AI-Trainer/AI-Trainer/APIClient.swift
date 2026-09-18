@@ -71,6 +71,9 @@ struct APIClient {
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
+        if let token = BackendAuth.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         return request
     }
 

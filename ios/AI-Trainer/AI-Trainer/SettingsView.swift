@@ -15,6 +15,8 @@ import SwiftUI
 struct SettingsView: View {
     @StateObject private var healthKit = HealthKitManager()
     @Environment(\.dismiss) private var dismiss
+    @State private var accessKey = ""
+    @State private var keySaved = false
 
     var body: some View {
         NavigationStack {
@@ -53,6 +55,26 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.textSecondary)
                 } header: {
                     Text("Everything else")
+                }
+
+                Section {
+                    SecureField("Paste access key", text: $accessKey)
+                        .textFieldStyle(.plain)
+                        .foregroundStyle(Theme.textPrimary)
+                    Button("Save key") {
+                        BackendAuth.save(accessKey)
+                        keySaved = true
+                    }
+                    .disabled(accessKey.isEmpty && BackendAuth.token == nil)
+                    if keySaved {
+                        Text("Saved. Restart the app to reconnect.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.accent)
+                    }
+                } header: {
+                    Text("Backend access key")
+                } footer: {
+                    Text("Only needed if your coach backend runs on the internet and you've set HYBRID_COACH_API_KEY on it. Leave empty when running on your own computer. Stored on this phone only.")
                 }
 
                 Section {

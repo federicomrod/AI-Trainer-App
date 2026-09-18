@@ -22,11 +22,13 @@ more than that.
 
 import json
 import os
+import secrets
 from contextlib import asynccontextmanager
 from datetime import date as date_type
 from typing import Dict, List, Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 import checkin as checkin_module
@@ -41,21 +43,55 @@ import week as week_module
 from briefing import build_briefing
 from db import get_connection
 
-# Must match whatever port uvicorn is actually told to run on (see the
-# run command above); only needs overriding if that ever changes.
-PORT = int(os.environ.get("HYBRID_COACH_PORT", "8000"))
+# Must match whatever port uvicorn is actually told to run on. A host
+# that assigns the port announces it as PORT, which has to win: binding
+# anywhere else means the platform's traffic never arrives.
+PORT = int(os.environ.get("PORT") or os.environ.get("HYBRID_COACH_PORT") or 8000)
+
+# When set, every request must present this as a bearer token. Left
+# unset locally (nothing to guard against on your own LAN); set it on a
+# deployed copy, where the URL is reachable by anyone who finds it and
+# /turn spends real money on model calls.
+API_KEY = os.environ.get("HYBRID_COACH_API_KEY")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Advertise this server on the LAN via Bonjour so the app can find
-    # it without a hardcoded IP -- see discovery.py.
-    await discovery.start(PORT)
+    # it without a hardcoded IP -- see discovery.py. Never let this
+    # stop the server booting: it's a convenience for local use, and a
+    # deployed copy that refuses to start because it couldn't multicast
+    # would be a bad trade.
+    try:
+        await discovery.start(PORT)
+    except Exception as exc:  # noqa: BLE001 - startup must survive this
+        print(f"Bonjour advertisement unavailable, continuing: {exc}")
     yield
-    await discovery.stop()
+    try:
+        await discovery.stop()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 app = FastAPI(title="Hybrid Coach", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def require_api_key(request: Request, call_next):
+    """Gate everything behind a shared token, when one is configured.
+
+    Off unless HYBRID_COACH_API_KEY is set, so local development is
+    unchanged. /health stays open so the host's own uptime checks keep
+    working without being told the secret.
+
+    compare_digest rather than == so a wrong guess takes the same time
+    to reject however much of it was right.
+    """
+    if API_KEY and request.url.path != "/health":
+        presented = request.headers.get("Authorization", "")
+        if not secrets.compare_digest(presented, f"Bearer {API_KEY}"):
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+    return await call_next(request)
 
 
 class TurnRequest(BaseModel):

@@ -19,6 +19,7 @@ event loop and blocks waiting for it, which deadlocks when called from
 inside FastAPI's own running event loop (as api.py's lifespan does).
 """
 
+import os
 import socket
 
 from zeroconf import ServiceInfo
@@ -45,11 +46,25 @@ def _local_ip():
         s.close()
 
 
+def should_advertise():
+    """Bonjour only makes sense on the same LAN as the phone.
+
+    A deployed copy is reached by its public hostname instead, and a
+    container generally can't do multicast at all -- so advertising
+    there is at best pointless and at worst a failed bind during
+    startup. These variables are set by the host, not by us, so a
+    deployment needs no extra configuration to do the right thing.
+    """
+    deployed_markers = ("RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "RENDER")
+    return not any(os.environ.get(marker) for marker in deployed_markers)
+
+
 async def start(port):
     """Register the Bonjour service. Safe to call once at server
-    startup; does nothing if already registered."""
+    startup; does nothing if already registered, and nothing when
+    running somewhere Bonjour doesn't apply."""
     global _azc, _service_info
-    if _azc is not None:
+    if _azc is not None or not should_advertise():
         return
 
     ip = _local_ip()

@@ -14,10 +14,20 @@ Seven tables, matching CLAUDE.md exactly. Do not add an eighth without
 checking CLAUDE.md first.
 """
 
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "hybrid_coach.db"
+# Where the database file lives. Next to this script for local work,
+# but overridable so a deployed copy can put it on a mounted disk that
+# survives restarts. This matters more than it looks: a container's own
+# filesystem is thrown away on every deploy, so a database sitting in
+# the app directory would silently reset to empty each time new code
+# ships.
+DB_PATH = Path(
+    os.environ.get("HYBRID_COACH_DB_PATH")
+    or Path(__file__).parent / "hybrid_coach.db"
+)
 
 SCHEMA = """
 -- One row: who the athlete is, what they want, how they train.
@@ -124,6 +134,10 @@ def get_connection(db_path=DB_PATH):
     row_factory = sqlite3.Row means rows come back as dict-like objects
     (row["date"] instead of row[0]) — much less error-prone to read.
     """
+    # A mounted disk starts out as an empty directory, and on the very
+    # first boot the database file inside it doesn't exist yet -- make
+    # sure the directory is there so SQLite can create it.
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn

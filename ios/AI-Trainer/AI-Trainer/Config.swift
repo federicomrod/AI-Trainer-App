@@ -4,34 +4,56 @@
 //
 //  Every knob that decides *where* the backend is and *how long* we're
 //  willing to wait for it. One file, so changing the address is one
-//  edit in one obvious place -- the previous arrangement buried a
+//  edit in one obvious place -- the original arrangement buried a
 //  hardcoded LAN IP in APIClient, which went stale every time the
 //  router handed out a different lease.
-//
-//  The address is a .local hostname rather than an IP for exactly that
-//  reason: mDNS resolves the name to whatever address the machine
-//  currently has, so a new DHCP lease is invisible to the app.
-//  Resolving a .local name needs local-network permission, which is why
-//  NSLocalNetworkUsageDescription is in the Info.plist.
 
 import Foundation
 
 enum Config {
-    /// The backend's home. Change this one line to point the app
-    /// somewhere else.
-    static let backendURL = URL(string: "http://Federicos-Mac-mini.local:8000")!
+    // MARK: - Where the backend lives
 
-    /// Tried when the primary doesn't answer. The server has also run
-    /// on the laptop, so during the move to the mini either machine
-    /// might be the live one; without this the app would simply fail on
-    /// whichever day it guessed wrong. ServerDiscovery's Bonjour browse
-    /// backs both of these up and finds the server wherever it is.
-    static let fallbackBackendURL = URL(string: "http://Federicos-MacBook-Pro.local:8000")!
+    /// The deployed backend. Paste the address the host gives you
+    /// between the quotes, including https:// and with no trailing
+    /// slash, e.g.
+    ///
+    ///     "https://ai-trainer-production-1a2b.up.railway.app"
+    ///
+    /// Leave it empty to work entirely against a laptop on the LAN.
+    /// This is the only line that needs changing to move the app
+    /// between the two.
+    static let deployedBackend = ""
 
-    /// Ceiling on any ordinary request. These are local database reads
-    /// that normally answer in well under a tenth of a second, so 30s
-    /// is already enormously generous -- it exists only so a dead or
-    /// unreachable host fails visibly instead of hanging.
+    /// Machines that have run the server on the local network. Kept
+    /// after deploying so development against a laptop still works:
+    /// with `deployedBackend` set these are only reached if it's
+    /// unreachable, which on a phone away from home it always will be.
+    private static let localBackends = [
+        "http://Federicos-Mac-mini.local:8000",
+        "http://Federicos-MacBook-Pro.local:8000",
+    ]
+
+    /// Every address worth trying, best first. ServerDiscovery works
+    /// down this list and keeps the first that answers as a real,
+    /// working backend.
+    static let backendCandidates: [URL] = (
+        [deployedBackend] + localBackends
+    ).compactMap { address in
+        let trimmed = address.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? nil : URL(string: trimmed)
+    }
+
+    /// Where requests go before anything has been resolved, and the
+    /// address an error screen names.
+    static let backendURL = backendCandidates.first
+        ?? URL(string: "http://localhost:8000")!
+
+    // MARK: - How long we wait
+
+    /// Ceiling on any ordinary request. These are small reads that
+    /// normally answer in a fraction of a second, so 30s is already
+    /// enormously generous -- it exists only so a dead or unreachable
+    /// host fails visibly instead of hanging.
     static let requestTimeout: TimeInterval = 30
 
     /// POST /turn is the one request that waits on a real model call,
@@ -43,9 +65,35 @@ enum Config {
     /// forever.
     static let coachTurnTimeout: TimeInterval = 90
 
-    /// How long to wait on a single "are you there?" probe while
+    /// How long to wait on a single "are you really there?" probe while
     /// working out which address is live. Short on purpose: several of
     /// these run back to back at launch, and a wrong guess should cost
-    /// a moment, not a stall.
-    static let reachabilityProbeTimeout: TimeInterval = 3
+    /// a moment, not a stall. A little longer than a LAN probe needs,
+    /// because a deployed host may be waking from idle.
+    static let reachabilityProbeTimeout: TimeInterval = 8
+}
+
+/// The shared token for a deployed backend, if one is set up.
+///
+/// Typed once in Settings rather than compiled in, because this repo is
+/// public: a secret written into a source file is published the moment
+/// it's pushed. Stored per-install on the phone, and simply absent
+/// while the backend is a laptop on the LAN that needs no guarding.
+enum BackendAuth {
+    private static let key = "backendAccessKey"
+
+    static var token: String? {
+        let stored = UserDefaults.standard.string(forKey: key)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (stored?.isEmpty ?? true) ? nil : stored
+    }
+
+    static func save(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+        } else {
+            UserDefaults.standard.set(trimmed, forKey: key)
+        }
+    }
 }

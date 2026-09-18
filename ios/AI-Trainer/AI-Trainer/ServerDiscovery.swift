@@ -60,9 +60,9 @@ enum ServerDiscovery {
     /// never win over it. Each step is individually short, so the
     /// whole chain fails in seconds rather than minutes.
     static func resolveBaseURL() async -> URL? {
-        var tried: [URL] = [Config.backendURL, Config.fallbackBackendURL]
-        // Last confirmed address, in case the server is somewhere
-        // neither hostname covers.
+        var tried = Config.backendCandidates
+        // Last confirmed address, in case the server is somewhere the
+        // configured list doesn't cover.
         if let cached = cachedURL, !tried.contains(cached) {
             tried.append(cached)
         }
@@ -93,6 +93,11 @@ enum ServerDiscovery {
     private static func isLiveBackend(_ url: URL, timeout: TimeInterval) async -> Bool {
         var request = URLRequest(url: url.appendingPathComponent("profile"))
         request.timeoutInterval = timeout
+        // A protected backend answers 401 without this, which would
+        // look identical to "wrong server" and get it skipped.
+        if let token = BackendAuth.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
