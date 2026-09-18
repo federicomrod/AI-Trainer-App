@@ -19,6 +19,11 @@ struct AI_TrainerApp: App {
     // Bonjour browse only if that fails -- never the 60-second hang a
     // stale address would otherwise cause on the very first screen.
     @State private var backendReady = false
+    // nil until we've asked the server. Once asked: false means there's
+    // no profile yet, so onboarding runs before anything else -- asking
+    // the coach about a week it knows nothing about would produce
+    // confident nonsense.
+    @State private var isOnboarded: Bool?
 
     init() {
         #if os(iOS)
@@ -44,16 +49,20 @@ struct AI_TrainerApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if backendReady {
-                    TabView {
-                        TodayView()
-                            .tabItem { Label("Today", systemImage: "sun.max") }
-                        WeekView()
-                            .tabItem { Label("Week", systemImage: "calendar") }
-                        ProgressChartView()
-                            .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
-                        ChatView()
-                            .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right") }
+                if backendReady, let onboarded = isOnboarded {
+                    if onboarded {
+                        TabView {
+                            TodayView()
+                                .tabItem { Label("Today", systemImage: "sun.max") }
+                            WeekView()
+                                .tabItem { Label("Week", systemImage: "calendar") }
+                            ProgressChartView()
+                                .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                            ChatView()
+                                .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right") }
+                        }
+                    } else {
+                        OnboardingView { isOnboarded = true }
                     }
                 } else {
                     ProgressView()
@@ -65,11 +74,23 @@ struct AI_TrainerApp: App {
                                 candidate: APIClient.baseURL
                             )
                             backendReady = true
+                            isOnboarded = await hasProfile()
                         }
                 }
             }
             .tint(Theme.accent)
             .preferredColorScheme(.dark)
+        }
+    }
+
+    /// If the server can't be reached at all, assume onboarding is
+    /// already done: the tabs surface connection errors properly, while
+    /// onboarding would wrongly imply the athlete's setup was lost.
+    private func hasProfile() async -> Bool {
+        do {
+            return try await APIClient().fetchProfile().profile != nil
+        } catch {
+            return true
         }
     }
 }

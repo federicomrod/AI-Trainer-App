@@ -136,6 +136,25 @@ def init_db(conn):
     conn.commit()
 
 
+# Every table, in an order that's safe to delete in. Lives here next to
+# SCHEMA so there's one list to update if the data model ever changes,
+# rather than one copy per script that needs to clear the database.
+TABLES = (
+    "profile", "sessions", "lifts", "checkins", "events", "memory",
+    "messages",
+)
+
+
+def wipe(conn):
+    """Empty every table, leaving the schema in place. Used both by
+    seed.py (so re-seeding starts from a known state instead of piling
+    up duplicates) and by reset.py (wipe and stop there, for entering
+    real training instead of a fixture)."""
+    for table in TABLES:
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+
+
 if __name__ == "__main__":
     # Running "python3 server/db.py" directly just sets up the file.
     conn = get_connection()

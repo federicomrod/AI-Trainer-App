@@ -17,26 +17,13 @@ Usage:
 import importlib
 import sys
 
-from db import get_connection, init_db
+from db import get_connection, init_db, wipe
 
 FIXTURES = {
     "messy": "fixtures.messy_two_weeks",
     "calm": "fixtures.calm_two_weeks",
 }
 DEFAULT_FIXTURE = "messy"
-
-TABLES_IN_DELETE_ORDER = (
-    "profile", "sessions", "lifts", "checkins", "events", "memory",
-    "messages",
-)
-
-
-def reset(conn):
-    """Empty every table so re-seeding always starts from a known,
-    clean state instead of piling up duplicates."""
-    for table in TABLES_IN_DELETE_ORDER:
-        conn.execute(f"DELETE FROM {table}")
-    conn.commit()
 
 
 def load_fixture(conn, fx):
@@ -92,7 +79,7 @@ def main():
     fx = importlib.import_module(FIXTURES[name])
     conn = get_connection()
     init_db(conn)
-    reset(conn)
+    wipe(conn)
     load_fixture(conn, fx)
     print(f"Seeded database with the '{name}' fixture "
           f"(anchored on today = {fx.TODAY.isoformat()}).")

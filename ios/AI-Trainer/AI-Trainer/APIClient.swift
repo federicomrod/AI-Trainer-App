@@ -71,6 +71,18 @@ struct APIClient {
         return try await send(request, decoding: [WeekDay].self)
     }
 
+    /// Whether this athlete has been set up yet. A nil profile is what
+    /// sends the app to onboarding instead of the tabs.
+    func fetchProfile() async throws -> ProfileResponse {
+        let request = URLRequest(url: Self.baseURL.appendingPathComponent("profile"))
+        return try await send(request, decoding: ProfileResponse.self)
+    }
+
+    /// First-run setup: profile, plus optionally the usual week.
+    func submitOnboarding(_ body: OnboardingRequest) async throws -> OnboardingResponse {
+        try await post("onboarding", body: body, decoding: OnboardingResponse.self)
+    }
+
     /// The raw briefing text, with no message and no model call --
     /// developer/debug use only (Settings > Developer). Never shown on
     /// a user-facing screen; see TodayView's whyDetail() for what the

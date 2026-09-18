@@ -35,6 +35,7 @@ import day_detail
 import discovery
 import healthkit_import
 import log_session
+import onboarding as onboarding_module
 import progress as progress_module
 import week as week_module
 from briefing import build_briefing
@@ -146,6 +147,36 @@ class GoalsResponse(BaseModel):
 
 class GoalsRequest(BaseModel):
     goals: List[str]
+
+
+class ProfilePayload(BaseModel):
+    goals: List[str] = []
+    weekly_availability: Optional[str] = None
+    typical_session_length_min: Optional[int] = None
+    equipment: Optional[str] = None
+    preferred_exercises: List[str] = []
+    disliked_exercises: List[str] = []
+    injuries: Optional[str] = None
+    experience_level: Optional[str] = None
+
+
+class ProfileResponse(BaseModel):
+    """`profile` is null when nobody has set one up yet -- that's the
+    app's signal to show onboarding instead of asking for a decision
+    about a week it knows nothing about."""
+    profile: Optional[ProfilePayload]
+
+
+class OnboardingRequest(BaseModel):
+    profile: ProfilePayload
+    # weekday name -> session type, e.g. {"monday": "push"}. Optional:
+    # the coach can also just learn the week as it goes.
+    routine: Dict[str, str] = {}
+
+
+class OnboardingResponse(BaseModel):
+    profile: ProfilePayload
+    sessions_planned: List[str]
 
 
 class LiftPoint(BaseModel):
@@ -357,6 +388,34 @@ def put_goals(req: GoalsRequest):
     )
     conn.commit()
     return {"goals": req.goals}
+
+
+@app.get("/profile", response_model=ProfileResponse)
+def get_profile():
+    """Whether this athlete has been set up yet, and with what. The app
+    calls this at launch: a null profile means show onboarding."""
+    conn = get_connection()
+    return {"profile": onboarding_module.get_profile(conn)}
+
+
+@app.post("/onboarding", response_model=OnboardingResponse)
+def post_onboarding(req: OnboardingRequest):
+    """First-run setup: store the profile, and optionally turn the
+    athlete's usual week into planned sessions from today forward."""
+    conn = get_connection()
+    profile = req.profile.model_dump()
+    try:
+        # Validate everything before writing anything -- see
+        # onboarding.validate_setup().
+        onboarding_module.validate_setup(profile, req.routine)
+    except onboarding_module.OnboardingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    onboarding_module.save_profile(conn, profile)
+    planned = onboarding_module.apply_routine(conn, req.routine, date_type.today())
+    return {
+        "profile": onboarding_module.get_profile(conn),
+        "sessions_planned": planned,
+    }
 
 
 @app.get("/progress", response_model=ProgressResponse)

@@ -121,6 +121,56 @@ struct MessageSegment: Codable, Identifiable {
     var isHeadCoach: Bool { speaker == "head_coach" }
 }
 
+/// The athlete's profile -- what the coach weighs every decision
+/// against. Mirrors CLAUDE.md's `profile` table.
+struct ProfilePayload: Codable {
+    var goals: [String] = []
+    var weeklyAvailability: String?
+    var typicalSessionLengthMin: Int?
+    var equipment: String?
+    var preferredExercises: [String] = []
+    var dislikedExercises: [String] = []
+    var injuries: String?
+    var experienceLevel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case goals
+        case weeklyAvailability = "weekly_availability"
+        case typicalSessionLengthMin = "typical_session_length_min"
+        case equipment
+        case preferredExercises = "preferred_exercises"
+        case dislikedExercises = "disliked_exercises"
+        case injuries
+        case experienceLevel = "experience_level"
+    }
+}
+
+/// GET /profile. `profile` is nil when nobody has set one up yet --
+/// that's what makes the app show onboarding instead of asking the
+/// coach about a week it knows nothing about.
+struct ProfileResponse: Codable {
+    let profile: ProfilePayload?
+}
+
+/// POST /onboarding: the profile plus, optionally, the athlete's usual
+/// week as weekday -> session type. The server only plans from today
+/// forward from that -- it never back-fills training that didn't
+/// happen.
+struct OnboardingRequest: Encodable {
+    let profile: ProfilePayload
+    let routine: [String: String]
+}
+
+struct OnboardingResponse: Decodable {
+    let profile: ProfilePayload
+    let sessionsPlanned: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case profile
+        case sessionsPlanned = "sessions_planned"
+    }
+}
+
 /// GET /briefing: the raw briefing text with no message and no model
 /// call. Developer/debug use only -- see Settings > Developer. Never
 /// shown on a user-facing screen (TodayView's "why" shows Decision's
