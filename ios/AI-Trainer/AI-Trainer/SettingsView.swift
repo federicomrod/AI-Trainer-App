@@ -54,6 +54,18 @@ struct SettingsView: View {
                 } header: {
                     Text("Everything else")
                 }
+
+                Section {
+                    NavigationLink {
+                        DebugBriefingView()
+                    } label: {
+                        Label("Raw briefing", systemImage: "wrench.and.screwdriver")
+                    }
+                } header: {
+                    Text("Developer")
+                } footer: {
+                    Text("Debug tools, not meant for day-to-day use. Shows the actual text sent to the model, unfiltered.")
+                }
             }
             .navigationTitle("Settings")
             .toolbar {

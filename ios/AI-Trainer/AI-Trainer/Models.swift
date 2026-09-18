@@ -52,6 +52,27 @@ struct SpecialistNote: Codable, Identifiable {
     let text: String
 }
 
+/// One factor behind the decision, meant to be shown directly to the
+/// athlete when they tap "why" -- plain language, never a debug dump.
+/// See prompts/planner.md's `reasons` guidance: 2-4 of these, pulled
+/// straight from the briefing.
+struct Reason: Codable, Identifiable {
+    var id: String { factor }
+    let factor: String
+    let direction: String
+    let confidence: String
+
+    /// SF Symbol for this factor's direction -- no new color, the
+    /// shape alone carries "supports" vs "caution" vs "neutral".
+    var symbolName: String {
+        switch direction {
+        case "supports": return "checkmark.circle.fill"
+        case "caution": return "exclamationmark.triangle.fill"
+        default: return "circle.fill"
+        }
+    }
+}
+
 /// The decision itself: KEEP, MODIFY, or REST, plus everything that
 /// explains it. This is exactly what the one planner call returns,
 /// already validated by the backend before the app ever sees it.
@@ -59,6 +80,7 @@ struct Decision: Codable {
     let decision: String
     let today: TodaySession
     let why: String
+    let reasons: [Reason]
     let planDiff: [PlanDiffEntry]
     let specialistNotes: [SpecialistNote]
     let memoryToAdd: [String]
@@ -66,7 +88,7 @@ struct Decision: Codable {
     let safetyFlag: String?
 
     enum CodingKeys: String, CodingKey {
-        case decision, today, why
+        case decision, today, why, reasons
         case planDiff = "plan_diff"
         case specialistNotes = "specialist_notes"
         case memoryToAdd = "memory_to_add"
@@ -97,6 +119,14 @@ struct MessageSegment: Codable, Identifiable {
 
     var id: String { "\(speaker)-\(text.hashValue)" }
     var isHeadCoach: Bool { speaker == "head_coach" }
+}
+
+/// GET /briefing: the raw briefing text with no message and no model
+/// call. Developer/debug use only -- see Settings > Developer. Never
+/// shown on a user-facing screen (TodayView's "why" shows Decision's
+/// `reasons` instead, built for an athlete to actually read).
+struct BriefingDebugResponse: Codable {
+    let briefing: String
 }
 
 /// The full response from POST /turn: the briefing that was assembled,

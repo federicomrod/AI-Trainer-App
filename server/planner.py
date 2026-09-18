@@ -74,6 +74,24 @@ DECISION_SCHEMA = {
             "required": ["type", "duration_min", "exercises", "intensity_note"],
         },
         "why": {"type": "string"},
+        "reasons": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "factor": {"type": "string"},
+                    "direction": {
+                        "type": "string",
+                        "enum": ["supports", "caution", "neutral"],
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "enum": ["high", "medium", "low"],
+                    },
+                },
+                "required": ["factor", "direction", "confidence"],
+            },
+        },
         "plan_diff": {
             "type": "array",
             "items": {
@@ -106,7 +124,7 @@ DECISION_SCHEMA = {
         "safety_flag": {"type": ["string", "null"]},
     },
     "required": [
-        "decision", "today", "why", "plan_diff", "specialist_notes",
+        "decision", "today", "why", "reasons", "plan_diff", "specialist_notes",
         "memory_to_add", "question", "safety_flag",
     ],
 }

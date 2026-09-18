@@ -26,7 +26,7 @@ class ValidationError(Exception):
 
 
 REQUIRED_TOP_LEVEL = [
-    "decision", "today", "why", "plan_diff", "specialist_notes",
+    "decision", "today", "why", "reasons", "plan_diff", "specialist_notes",
     "memory_to_add", "question", "safety_flag",
 ]
 VALID_DECISIONS = {"KEEP", "MODIFY", "REST"}

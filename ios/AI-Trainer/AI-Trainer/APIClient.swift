@@ -71,6 +71,15 @@ struct APIClient {
         return try await send(request, decoding: [WeekDay].self)
     }
 
+    /// The raw briefing text, with no message and no model call --
+    /// developer/debug use only (Settings > Developer). Never shown on
+    /// a user-facing screen; see TodayView's whyDetail() for what the
+    /// athlete actually sees when they tap "why".
+    func fetchBriefingDebug() async throws -> BriefingDebugResponse {
+        let request = URLRequest(url: Self.baseURL.appendingPathComponent("briefing"))
+        return try await send(request, decoding: BriefingDebugResponse.self)
+    }
+
     /// Everything on record for one calendar day, for Week view's
     /// tap-to-open detail.
     func fetchDay(date: String) async throws -> DayDetailResponse {

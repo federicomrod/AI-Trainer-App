@@ -265,7 +265,7 @@ struct TodayView: View {
                 .buttonStyle(.plain)
 
                 if showingWhyDetail {
-                    whyDetail(response.briefing)
+                    whyDetail(response.decision?.reasons ?? [])
                 }
             } else {
                 specialistBlock(segment)
@@ -295,18 +295,39 @@ struct TodayView: View {
         .padding(.top, 2)
     }
 
-    // The actual briefing text the model was given for this call --
-    // goals, recent sessions, this week's plan, current soreness and
-    // energy, tracked numbers, events, memory. Not a curated subset:
-    // the whole thing, so nothing relevant to "why" is quietly left
-    // out.
-    private func whyDetail(_ briefing: String) -> some View {
-        Text(briefing)
-            .font(.system(.footnote, design: .monospaced))
-            .foregroundStyle(Theme.textSecondary)
+    // The actual inputs behind the call, in plain language -- not the
+    // raw briefing (that's developer debug output; see Settings >
+    // Developer for that). Each reason is a short factor from the
+    // briefing plus whether it backed today's call or was a reason for
+    // caution, so tapping "why" shows real substance instead of a text
+    // dump the athlete never asked for.
+    @ViewBuilder
+    private func whyDetail(_ reasons: [Reason]) -> some View {
+        if reasons.isEmpty {
+            Text("No further detail for this call.")
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .flatCard()
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(reasons) { reason in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: reason.symbolName)
+                            .font(.footnote)
+                            .foregroundStyle(reason.direction == "caution" ? Theme.accent : Theme.textSecondary)
+                            .padding(.top, 1)
+                        Text(reason.factor)
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.textPrimary)
+                    }
+                }
+            }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .flatCard()
+        }
     }
 
     @ViewBuilder

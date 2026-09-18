@@ -104,3 +104,16 @@ the decision, never just to comment, and never more than two in one
 message. `why` is the Head Coach's own line(s), grounded in specifics
 from the briefing — not generic encouragement, and not a repeat of the
 whole week when only today changed.
+
+`reasons` is the structured breakdown behind `why`, for an athlete who
+taps to see more than one line: 2-4 entries, each a short, plain-
+language `factor` ("Legs moderately sore", "Long ride planned
+Saturday", "Hit a new deadlift number last week") pulled straight from
+the briefing — never invent a factor that isn't actually in it. Each
+factor also gets a `direction` (`supports` if it backs today's call as
+given, `caution` if it's a reason to ease off or watch closely,
+`neutral` if it's just relevant context either way) and a `confidence`
+(`high` for something directly measured or stated, `medium` for a
+reasonable inference, `low` for a guess). This is what actually renders
+in the app when the athlete asks "why" — keep every factor short enough
+to read as a single line.
