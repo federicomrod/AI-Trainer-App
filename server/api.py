@@ -41,7 +41,7 @@ import onboarding as onboarding_module
 import progress as progress_module
 import week as week_module
 from briefing import build_briefing
-from db import get_connection
+from db import get_connection, init_db
 
 # Must match whatever port uvicorn is actually told to run on. A host
 # that assigns the port announces it as PORT, which has to win: binding
@@ -57,6 +57,13 @@ API_KEY = os.environ.get("HYBRID_COACH_API_KEY")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create the tables if they aren't there yet. Everything local ran
+    # against a database seed.py or reset.py had already built, so the
+    # server never had to do this itself -- and a deployed copy starts
+    # with a genuinely empty disk, where every query failed on a
+    # missing table. CREATE TABLE IF NOT EXISTS, so this is a no-op on
+    # every boot after the first.
+    init_db(get_connection())
     # Advertise this server on the LAN via Bonjour so the app can find
     # it without a hardcoded IP -- see discovery.py. Never let this
     # stop the server booting: it's a convenience for local use, and a
@@ -299,6 +306,18 @@ class DayDetailResponse(BaseModel):
     chat_note: Optional[str]
     lifts: List[DayLift]
     checkin: Optional[DayCheckIn]
+
+
+@app.get("/")
+def root():
+    """Something human at the bare address. There's no web page here --
+    this backend only answers the app -- but a plain 404 at the root
+    reads as "the deploy is broken" when it isn't."""
+    return {
+        "service": "Hybrid Coach backend",
+        "status": "running",
+        "note": "No web interface here. The iPhone app talks to this.",
+    }
 
 
 @app.get("/health")

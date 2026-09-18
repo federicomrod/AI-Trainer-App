@@ -22,7 +22,7 @@ enum Config {
     /// Leave it empty to work entirely against a laptop on the LAN.
     /// This is the only line that needs changing to move the app
     /// between the two.
-    static let deployedBackend = ""
+    static let deployedBackend = "https://ai-trainer-app-production-c991.up.railway.app"
 
     /// Machines that have run the server on the local network. Kept
     /// after deploying so development against a laptop still works:
