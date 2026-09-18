@@ -19,6 +19,7 @@ final class TodayViewModel: ObservableObject {
     @Published var response: TurnResponse?
     @Published var errorMessage: String?
     @Published var messageDraft = ""
+    @Published var pendingMessage: String?
     @Published var photoPickerItem: PhotosPickerItem?
     #if os(iOS)
     @Published var attachedImage: UIImage?
@@ -60,6 +61,13 @@ final class TodayViewModel: ObservableObject {
     private func send(message: String, imageBase64: String? = nil) async {
         isLoading = true
         errorMessage = nil
+        // What the athlete just said, held only while the call is in
+        // flight. Without this Today gives no sign at all that a
+        // message went anywhere: the decision card silently swaps for
+        // the next one, and an unchanged KEEP looks identical to
+        // having sent nothing.
+        pendingMessage = message.isEmpty ? nil : message
+        defer { pendingMessage = nil }
         do {
             let result = try await client.turn(message: message, imageBase64: imageBase64)
             response = result
@@ -143,6 +151,7 @@ struct TodayView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 0) {
+                    sendingBanner
                     attachmentPreview
                     messageBar
                 }
@@ -157,6 +166,35 @@ struct TodayView: View {
                 Task { await viewModel.loadAttachedImage() }
             }
             #endif
+        }
+    }
+
+    // Sits directly above the input, where the athlete is already
+    // looking after speaking: what was heard, and that the coach has
+    // it. The model call runs 10-30 seconds, so silence here reads as
+    // a dropped message.
+    @ViewBuilder
+    private var sendingBanner: some View {
+        if viewModel.isLoading, let pending = viewModel.pendingMessage {
+            HStack(alignment: .top, spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(Theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sent — coach is thinking…")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                    Text(pending)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(3)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+            .padding(.top, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .appBackground()
         }
     }
 
@@ -378,7 +416,9 @@ struct TodayView: View {
     private var messageBar: some View {
         VStack(spacing: 12) {
             // Primary: the main way to talk to the coach.
-            VoiceInputButton(text: $viewModel.messageDraft)
+            VoiceInputButton(text: $viewModel.messageDraft) {
+                Task { await viewModel.sendDraft() }
+            }
 
             // Secondary: typing stays fully available, just visually
             // smaller now that voice leads. Open-ended copy on

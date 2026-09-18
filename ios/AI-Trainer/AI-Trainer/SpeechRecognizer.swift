@@ -35,6 +35,14 @@ final class SpeechRecognizer: ObservableObject {
     @Published private(set) var transcript = ""
     @Published var errorMessage: String?
 
+    /// Set once, when a take finishes normally with something in it.
+    /// Voice is the primary way to talk to the coach here, so finishing
+    /// a take is the athlete saying "send this" -- the view watches
+    /// this and submits rather than leaving them to find a second,
+    /// smaller button afterwards. Nil after a cancel, and cleared by
+    /// consumeFinished() so two identical takes in a row both fire.
+    @Published private(set) var finishedTranscript: String?
+
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -66,6 +74,7 @@ final class SpeechRecognizer: ObservableObject {
         errorMessage = nil
         transcript = ""
         committed = ""
+        finishedTranscript = nil
 
         do {
             try await requestPermissions()
@@ -185,13 +194,27 @@ final class SpeechRecognizer: ObservableObject {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         request?.endAudio()
-        task?.cancel()
+        // finish(), not cancel(): this is the athlete saying "I'm
+        // done", so let the task wind down and deliver rather than
+        // killing it mid-flight. Anything it reports after this point
+        // is ignored -- clearing `request` below makes the result
+        // handler's identity check fail, so a late result can't
+        // overwrite what we're about to submit.
+        task?.finish()
         request = nil
         task = nil
         isRecording = false
+        let spoken = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        finishedTranscript = spoken.isEmpty ? nil : spoken
         #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         #endif
+    }
+
+    /// Marks the finished take as handled, so the next one is seen as a
+    /// change even if the athlete says exactly the same thing twice.
+    func consumeFinished() {
+        finishedTranscript = nil
     }
 
     /// Discards the current recording and transcript entirely -- the
@@ -203,6 +226,9 @@ final class SpeechRecognizer: ObservableObject {
         stop()
         transcript = ""
         committed = ""
+        // Explicitly after stop(), which would otherwise hand the
+        // discarded take straight to the view to submit.
+        finishedTranscript = nil
     }
 
     private func requestPermissions() async throws {

@@ -16,6 +16,12 @@ import SwiftUI
 
 struct VoiceInputButton: View {
     @Binding var text: String
+    /// Called when a take finishes with something in it, right after
+    /// `text` has been filled with the final transcript. Finishing a
+    /// take is the athlete saying "send this" -- making them then hunt
+    /// for a smaller arrow is exactly the friction this control exists
+    /// to remove. The X cancels instead, and never calls this.
+    var onSubmit: (() -> Void)?
     @StateObject private var recognizer = SpeechRecognizer()
 
     private let diameter: CGFloat = 72
@@ -75,6 +81,12 @@ struct VoiceInputButton: View {
             if recognizer.isRecording {
                 text = recognizer.transcript
             }
+        }
+        .onChange(of: recognizer.finishedTranscript) {
+            guard let finished = recognizer.finishedTranscript else { return }
+            text = finished
+            recognizer.consumeFinished()
+            onSubmit?()
         }
         .alert(
             "Voice input",

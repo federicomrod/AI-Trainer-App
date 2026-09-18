@@ -278,7 +278,9 @@ struct ChatView: View {
     private var messageBar: some View {
         VStack(spacing: 12) {
             // Primary: the main way to talk to the coach.
-            VoiceInputButton(text: $viewModel.draft)
+            VoiceInputButton(text: $viewModel.draft) {
+                Task { await viewModel.send() }
+            }
 
             // Secondary: typing stays fully available, just visually
             // smaller now that voice leads.
