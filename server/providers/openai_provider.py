@@ -47,7 +47,18 @@ def _strict(schema):
 
 def get_structured(system_prompt, user_content, schema, image_base64=None):
     model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
-    client = OpenAI()  # reads OPENAI_API_KEY
+    try:
+        client = OpenAI()  # reads OPENAI_API_KEY
+    except Exception as exc:  # noqa: BLE001 - no key is a config problem, not a crash
+        # With no key at all the client raises here, before any request
+        # is made -- a different path from a *wrong* key, which fails on
+        # the call below and is already reported cleanly. Unwrapped, this
+        # one escaped as a bare HTTP 500 that said nothing about the
+        # cause.
+        raise PlannerError(
+            f"OpenAI isn't configured: {exc}. Set OPENAI_API_KEY in the "
+            f"server's environment."
+        ) from exc
 
     if image_base64:
         message_content = [
