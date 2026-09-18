@@ -23,6 +23,7 @@ more than that.
 import json
 import os
 import secrets
+from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import date as date_type
 from typing import Dict, List, Literal, Optional
@@ -41,7 +42,7 @@ import onboarding as onboarding_module
 import progress as progress_module
 import week as week_module
 from briefing import build_briefing
-from db import get_connection, init_db
+from db import DB_PATH, get_connection, init_db
 
 # Must match whatever port uvicorn is actually told to run on. A host
 # that assigns the port announces it as PORT, which has to win: binding
@@ -317,6 +318,30 @@ def root():
         "service": "Hybrid Coach backend",
         "status": "running",
         "note": "No web interface here. The iPhone app talks to this.",
+    }
+
+
+@app.get("/config_check")
+def config_check():
+    """Whether the server has what it needs, without revealing any of
+    it. Names and lengths only -- never a value, so this is safe to
+    open in a browser.
+
+    Exists because a missing environment variable is invisible from the
+    outside: the symptom is a 500 from whichever endpoint happens to
+    need it, which says nothing about the cause.
+    """
+    provider = os.environ.get("HYBRID_COACH_PROVIDER", "openai").strip().lower()
+    key_name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+    key = os.environ.get(key_name)
+    return {
+        "provider": provider,
+        "model_key_variable": key_name,
+        "model_key_present": bool(key),
+        "model_key_length": len(key) if key else 0,
+        "database_path": str(DB_PATH),
+        "database_exists": Path(DB_PATH).exists(),
+        "access_key_required": bool(API_KEY),
     }
 
 
