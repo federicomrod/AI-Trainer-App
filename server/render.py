@@ -24,13 +24,13 @@ def render_reply(decision):
     """Return the plain-text coach reply for an already-validated
     decision (the safety pre-check path in cli.py never reaches this —
     it renders the fixed prompts/safety-response.md text directly)."""
+    # plan_diff is deliberately not here. It's structured data -- dates,
+    # session types, an arrow -- and printing it produced lines like
+    # "2026-09-20: Unplanned -> Endurance ride — …" in the athlete's
+    # chat. The Week view shows plan changes properly; in conversation
+    # the coach says so in `why`, in words. (cli.py prints the full
+    # decision JSON separately, so the diff is still visible there.)
     lines = [decision.get("why", "").strip()]
-
-    for change in decision.get("plan_diff") or []:
-        lines.append(
-            f"\n- {change.get('date')}: {change.get('from')} -> "
-            f"{change.get('to')} — {change.get('reason')}"
-        )
 
     notes = decision.get("specialist_notes") or []
     if len(notes) > MAX_SPECIALISTS:
@@ -41,7 +41,9 @@ def render_reply(decision):
         if not text:
             continue
         label = COACH_LABELS.get(note.get("coach", ""), note.get("coach", "Coach"))
-        lines.append(f"\n**{label}:** {text}")
+        # Plain "Label:", not Markdown bold: the app shows this string
+        # as-is, so ** would appear literally.
+        lines.append(f"\n{label}: {text}")
 
     if decision.get("question"):
         lines.append(f"\n{decision['question']}")
@@ -63,13 +65,8 @@ def render_segments(decision):
     additional view of the same decision, not a replacement."""
     segments = []
 
-    head_lines = [decision.get("why", "").strip()]
-    for change in decision.get("plan_diff") or []:
-        head_lines.append(
-            f"{change.get('date')}: {change.get('from')} -> "
-            f"{change.get('to')} — {change.get('reason')}"
-        )
-    head_text = "\n".join(l for l in head_lines if l)
+    # Only `why` -- no plan_diff lines. See render_reply().
+    head_text = decision.get("why", "").strip()
     if head_text:
         segments.append({"speaker": HEAD_COACH, "text": head_text})
 
