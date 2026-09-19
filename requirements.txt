@@ -1,6 +1,16 @@
-# The app's dependencies live in server/requirements.txt. This file
-# exists so a host can detect a Python project from the repository
-# root, which the deploy has to use: CLAUDE.md keeps the coach prompts
-# in /prompts, outside the server package, and a build rooted at
-# server/ leaves them out of the image entirely.
--r server/requirements.txt
+# Backend dependencies -- the one real list.
+#
+# Lives at the repository root, and must stay self-contained (no
+# "-r other/file"), because the host builds from the root and copies
+# this file into the image *before* the rest of the code, to cache the
+# install step. A reference to server/requirements.txt pointed at a file
+# that wasn't there yet, and failed the build.
+#
+# The build is rooted here rather than in server/ because CLAUDE.md
+# keeps the coach prompts in /prompts, outside the server package.
+anthropic==1.5.0
+openai==3.14.0
+python-dotenv==0.21.0
+fastapi==0.115.6
+uvicorn==0.34.0
+zeroconf==0.151.3
