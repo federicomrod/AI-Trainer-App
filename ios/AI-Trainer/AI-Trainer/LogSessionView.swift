@@ -108,6 +108,7 @@ final class LogSessionViewModel: ObservableObject {
 
 struct LogSessionView: View {
     @StateObject private var viewModel = LogSessionViewModel()
+    @StateObject private var voice = SpeechRecognizer()
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -142,7 +143,18 @@ struct LogSessionView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            Task { await viewModel.submit() }
+                            Task {
+                                // Finish a note still being dictated first,
+                                // so its last words make it into what's saved.
+                                // Copied directly: the button only mirrors it
+                                // on its next redraw, which could come after
+                                // submit() has read the notes.
+                                if voice.isActive {
+                                    await voice.finish()
+                                    if !voice.transcript.isEmpty { viewModel.notes = voice.transcript }
+                                }
+                                await viewModel.submit()
+                            }
                         }
                         .disabled(viewModel.isSubmitting || viewModel.context == nil)
                     }
@@ -241,7 +253,7 @@ struct LogSessionView: View {
                         text: $viewModel.notes, axis: .vertical
                     )
                     .lineLimit(2...5)
-                    VoiceInputButton(text: $viewModel.notes)
+                    VoiceInputButton(recognizer: voice, text: $viewModel.notes)
                 }
             }
 

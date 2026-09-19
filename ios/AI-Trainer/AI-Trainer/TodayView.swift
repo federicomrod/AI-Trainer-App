@@ -104,8 +104,8 @@ final class TodayViewModel: ObservableObject {
             // decision was rejected) -- surface that the same way as a
             // network failure, since neither case has anything safe to
             // show as "today's plan".
-            if let backendError = result.error {
-                errorMessage = result.errorDetail ?? backendError
+            if let problem = result.userFacingError {
+                errorMessage = problem
             } else {
                 // Only remember a decision that's actually usable --
                 // caching an error would mean opening to it tomorrow.
@@ -133,6 +133,9 @@ final class TodayViewModel: ObservableObject {
 
 struct TodayView: View {
     @StateObject private var viewModel = TodayViewModel()
+    // Owned here, not by the button, so the send arrow can finish a
+    // recording in progress rather than sending around it.
+    @StateObject private var voice = SpeechRecognizer()
     @State private var showingCheckIn = false
     @State private var showingLogSession = false
     @State private var showingGoals = false
@@ -496,7 +499,7 @@ struct TodayView: View {
     private var messageBar: some View {
         VStack(spacing: 12) {
             // Primary: the main way to talk to the coach.
-            VoiceInputButton(text: $viewModel.messageDraft) {
+            VoiceInputButton(recognizer: voice, text: $viewModel.messageDraft) {
                 Task { await viewModel.sendDraft() }
             }
 
@@ -518,14 +521,22 @@ struct TodayView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Button {
-                    Task { await viewModel.sendDraft() }
+                    // Mid-recording, "send" means finish and send what
+                    // was said -- the take submits itself when it ends.
+                    if voice.isActive {
+                        Task { await voice.finish() }
+                    } else {
+                        Task { await viewModel.sendDraft() }
+                    }
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title3)
                 }
                 .disabled(
-                    (viewModel.messageDraft.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.hasAttachment)
+                    (viewModel.messageDraft.trimmingCharacters(in: .whitespaces).isEmpty
+                        && !viewModel.hasAttachment && !voice.isActive)
                     || viewModel.isLoading
+                    || voice.phase == .finishing
                 )
             }
         }

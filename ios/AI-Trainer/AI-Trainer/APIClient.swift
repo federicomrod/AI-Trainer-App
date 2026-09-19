@@ -26,9 +26,9 @@ enum APIError: Error, LocalizedError {
         case .badResponse:
             return "The server sent back something unexpected."
         case .http(let code):
-            return "Server error (HTTP \(code))."
-        case .decoding(let error):
-            return "Couldn't read the server's response: \(error.localizedDescription)"
+            return "The coach's server had a problem (error \(code)). Try again."
+        case .decoding:
+            return "The coach's server replied in a form the app didn't expect."
         case .unreachable(let host):
             return "Can't reach the coach at \(host). It may be asleep, "
                 + "or on a different network than this phone."

@@ -86,7 +86,7 @@ final class ChatViewModel: ObservableObject {
                 // planner_error or validation_error: nothing safe to
                 // show as the coach's reply. Surface it inline rather
                 // than pretending the exchange completed normally.
-                errorMessage = result.errorDetail ?? result.error ?? "No reply."
+                errorMessage = result.userFacingError ?? "No reply."
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -97,6 +97,9 @@ final class ChatViewModel: ObservableObject {
 
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
+    // Owned here, not by the button, so the send arrow can finish a
+    // recording in progress rather than sending around it.
+    @StateObject private var voice = SpeechRecognizer()
 
     var body: some View {
         NavigationStack {
@@ -278,7 +281,7 @@ struct ChatView: View {
     private var messageBar: some View {
         VStack(spacing: 12) {
             // Primary: the main way to talk to the coach.
-            VoiceInputButton(text: $viewModel.draft) {
+            VoiceInputButton(recognizer: voice, text: $viewModel.draft) {
                 Task { await viewModel.send() }
             }
 
@@ -297,14 +300,22 @@ struct ChatView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Button {
-                    Task { await viewModel.send() }
+                    // Mid-recording, "send" means finish and send what
+                    // was said -- the take submits itself when it ends.
+                    if voice.isActive {
+                        Task { await voice.finish() }
+                    } else {
+                        Task { await viewModel.send() }
+                    }
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title3)
                 }
                 .disabled(
-                    (viewModel.draft.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.hasAttachment)
+                    (viewModel.draft.trimmingCharacters(in: .whitespaces).isEmpty
+                        && !viewModel.hasAttachment && !voice.isActive)
                     || viewModel.isSending
+                    || voice.phase == .finishing
                 )
             }
         }

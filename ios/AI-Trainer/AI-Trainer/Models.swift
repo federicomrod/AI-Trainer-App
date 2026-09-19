@@ -199,6 +199,23 @@ struct TurnResponse: Codable {
         case errorDetail = "error_detail"
         case segments
     }
+
+    /// What to tell the athlete when this turn came back with an error.
+    /// `errorDetail` is for developers -- it can be a provider's raw JSON
+    /// error body or a note about validation internals -- so it's never
+    /// shown as-is.
+    var userFacingError: String? {
+        switch error {
+        case nil:
+            return nil
+        case "planner_error":
+            return "The coach couldn't put an answer together just now. Try again in a moment."
+        case "validation_error":
+            return "The coach's answer didn't pass its checks, so it wasn't shown. Try again."
+        default:
+            return "Something went wrong getting the coach's answer. Try again."
+        }
+    }
 }
 
 /// One row from GET /messages, for Coach chat. `text` is already the

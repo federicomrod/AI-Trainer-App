@@ -40,6 +40,9 @@ struct AI_TrainerApp: App {
     @State private var isOnboarded: Bool?
 
     init() {
+        #if DEBUG
+        VoiceSelfTest.runIfRequested()
+        #endif
         #if os(iOS)
         // Screen titles ("Today", "This Week", "Progress", "Coach")
         // are UIKit nav-bar text, not SwiftUI Text -- this is the one

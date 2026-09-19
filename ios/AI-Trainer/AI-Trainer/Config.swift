@@ -71,6 +71,18 @@ enum Config {
     /// a moment, not a stall. A little longer than a LAN probe needs,
     /// because a deployed host may be waking from idle.
     static let reachabilityProbeTimeout: TimeInterval = 8
+
+    // MARK: - Voice
+
+    /// How often a recording hands over to a fresh recognition task, so
+    /// no single task runs into a recognizer limit. Lossless: see
+    /// TranscriptStitcher.
+    static let voiceHandoverInterval: Duration = .seconds(25)
+
+    /// The longest starting or finishing a recording may take before
+    /// it's forcibly reset to idle. Finishing normally waits up to 2s
+    /// for the last words, so this sits comfortably above that.
+    static let voiceStallTimeout: Duration = .seconds(4)
 }
 
 /// The shared token for a deployed backend, if one is set up.
