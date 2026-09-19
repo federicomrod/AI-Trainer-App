@@ -17,6 +17,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var accessKey = ""
     @State private var keySaved = false
+    @State private var showingSetup = false
 
     var body: some View {
         NavigationStack {
@@ -58,6 +59,18 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button {
+                        showingSetup = true
+                    } label: {
+                        Label("Redo setup", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                } header: {
+                    Text("Your profile")
+                } footer: {
+                    Text("Goals, availability, equipment and your usual week. Replaces what's there now; your training history is kept.")
+                }
+
+                Section {
                     SecureField("Paste access key", text: $accessKey)
                         .textFieldStyle(.plain)
                         .foregroundStyle(Theme.textPrimary)
@@ -90,6 +103,9 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showingSetup) {
+                OnboardingView { showingSetup = false }
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
