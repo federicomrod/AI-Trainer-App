@@ -18,6 +18,13 @@ final class TodayViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var response: TurnResponse?
     @Published var errorMessage: String?
+    /// Headline above `errorMessage`. Set alongside it, because not
+    /// every failure is a network failure: a server that answered
+    /// perfectly well and rejected its own decision was still being
+    /// announced as "Couldn't reach the coach", which sent us looking
+    /// at the network for a problem that was never there.
+    @Published var errorTitle = "Couldn't reach the coach"
+    @Published var errorSymbol = "wifi.exclamationmark"
     @Published var messageDraft = ""
     @Published var pendingMessage: String?
     /// The message whose turn failed, kept so it can be retried.
@@ -105,6 +112,9 @@ final class TodayViewModel: ObservableObject {
             // network failure, since neither case has anything safe to
             // show as "today's plan".
             if let problem = result.userFacingError {
+                // It answered -- it just couldn't produce a session.
+                errorTitle = "The coach couldn't answer"
+                errorSymbol = "exclamationmark.triangle"
                 errorMessage = problem
             } else {
                 // Only remember a decision that's actually usable --
@@ -114,6 +124,17 @@ final class TodayViewModel: ObservableObject {
                 cachedAt = nil
             }
         } catch {
+            switch error {
+            case APIError.timedOut:
+                errorTitle = "The coach took too long"
+                errorSymbol = "clock.badge.exclamationmark"
+            case APIError.unreachable:
+                errorTitle = "Couldn't reach the coach"
+                errorSymbol = "wifi.exclamationmark"
+            default:
+                errorTitle = "Something went wrong"
+                errorSymbol = "exclamationmark.triangle"
+            }
             errorMessage = error.localizedDescription
             // Hold on to what they said so Retry can resend it. Without
             // this a failed turn loses the message: the thinking
@@ -325,7 +346,7 @@ struct TodayView: View {
     @ViewBuilder
     private func errorContent(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Couldn't reach the coach", systemImage: "wifi.exclamationmark")
+            Label(viewModel.errorTitle, systemImage: viewModel.errorSymbol)
                 .font(.headline)
                 .foregroundStyle(Theme.textPrimary)
             Text(message)

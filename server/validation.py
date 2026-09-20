@@ -9,12 +9,22 @@ Two things happen here:
    matching JSON schema already (see planner.py), so this mostly
    catches the unusual case where something still comes back wrong.
 2. validate_duration() — the real hard rule the user asked for:
-   today's session can never be longer than the athlete's actual
-   available time. If it is, this REJECTS the decision. It does not
-   shrink the exercise list to fit and it does not call the model
-   again — either of those would be a silent change to what the model
-   actually said, and CLAUDE.md's whole approach depends on knowing
-   the model's raw output was honest.
+   when the athlete says how much time they have ("only got 40
+   minutes"), today's session can never be longer than that. If it
+   is, this REJECTS the decision. It does not shrink the exercise
+   list to fit and it does not call the model again — either of those
+   would be a silent change to what the model actually said, and
+   CLAUDE.md's whole approach depends on knowing the model's raw
+   output was honest.
+
+   Only time the athlete actually stated counts. The profile's
+   *typical* session length is a description of a normal week, not a
+   ceiling on any given day, and treating it as one broke the app
+   outright: a profile saying 50 min rejected every 55-60 min ride the
+   coach proposed, and Today showed an error instead of a plan.
+   Typical length is in the briefing, so it steers the decision where
+   it belongs — in the model's reasoning, not as a hard rule that can
+   leave the athlete with no session at all.
 """
 
 import re
@@ -79,26 +89,24 @@ def extract_stated_minutes(text):
 
 
 def get_available_minutes(conn, message_text):
-    """Today's available time: whatever the athlete stated in this
-    message, else the profile's typical session length. This does NOT
-    look at events (e.g. today's travel) to shrink automatically --
-    "no gym access" isn't the same claim as "no time", and conflating
-    them is judgement the model should make from the briefing, not a
-    hard rule in code."""
+    """Today's hard time limit: whatever the athlete stated in this
+    message, or None if they didn't say.
+
+    Deliberately nothing else. The profile's typical session length is
+    not a limit (see this module's docstring), and events aren't
+    either -- "no gym access" isn't the same claim as "no time", and
+    conflating them is judgement the model should make from the
+    briefing, not a hard rule in code."""
     stated = extract_stated_minutes(message_text)
     if stated is not None:
         return stated, "stated in the message"
-    row = conn.execute(
-        "SELECT typical_session_length_min FROM profile WHERE id = 1"
-    ).fetchone()
-    default = row["typical_session_length_min"] if row else None
-    return default, "profile's typical session length"
+    return None, "nothing stated"
 
 
 def validate_duration(decision, available_min, basis):
-    """Raise if today's plan is longer than what's actually available.
-    `available_min` of None means there was nothing to check against
-    (no profile, nothing stated) -- in that case this is a no-op."""
+    """Raise if today's plan is longer than the time the athlete said
+    they have. `available_min` of None means they didn't say, so there
+    is nothing to check against -- in that case this is a no-op."""
     if available_min is None:
         return
     duration = decision.get("today", {}).get("duration_min")
