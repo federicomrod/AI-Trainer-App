@@ -11,13 +11,65 @@ rule from coach-voice.md as a safety net in case the model doesn't:
 never more than two specialists in one message.
 """
 
+from datetime import date
+
 MAX_SPECIALISTS = 2
+
+# The voice that reports what was written to the database, as distinct
+# from the coach's own words. See saved_updates_text().
+LOG = "log"
 
 COACH_LABELS = {
     "strength": "Strength",
     "endurance": "Endurance",
     "recovery": "Recovery",
 }
+
+
+def _day_label(iso_date):
+    """"2026-09-14" -> "Mon". Falls back to the raw date rather than
+    raising: this is display text, not a calculation."""
+    try:
+        return date.fromisoformat(iso_date).strftime("%a")
+    except (ValueError, TypeError):
+        return iso_date
+
+
+def saved_updates_text(decision):
+    """One line naming every past day this turn actually wrote to the
+    sessions table, or None if it wrote none.
+
+    `_applied_updates` is put there by coach.py (see
+    session_corrections.py) and is not part of CLAUDE.md's decision
+    schema -- same convention as `_precheck_only`, an internal marker
+    saved alongside the decision so chat history renders identically
+    later. Shown because the alternative is what used to happen: the
+    coach sounded like it had taken the correction on board and
+    nothing was saved, with no way for the athlete to tell.
+    """
+    updates = decision.get("_applied_updates") or {}
+    applied = updates.get("applied") or []
+    rejected = updates.get("rejected") or []
+    parts = []
+    for entry in applied:
+        detail = (entry.get("type") or "").capitalize()
+        if entry.get("duration_min"):
+            detail += f", {entry['duration_min']} min"
+        if entry.get("status") and entry["status"] != "done":
+            detail += f", {entry['status']}"
+        parts.append(f"{_day_label(entry.get('date'))} ({detail})")
+
+    lines = []
+    if parts:
+        lines.append("Updated " + ", ".join(parts) + ".")
+    if rejected:
+        # Named, not swallowed: an athlete who said something about a
+        # day should never have to guess whether it landed.
+        lines.append(
+            "Couldn't save: " + "; ".join(rejected)
+            + ". Tell me again with the day and what you did."
+        )
+    return "\n".join(lines) or None
 
 
 def render_reply(decision):
@@ -30,7 +82,13 @@ def render_reply(decision):
     # chat. The Week view shows plan changes properly; in conversation
     # the coach says so in `why`, in words. (cli.py prints the full
     # decision JSON separately, so the diff is still visible there.)
-    lines = [decision.get("why", "").strip()]
+    lines = []
+    # First, because it's the answer to "did that get saved?" -- and
+    # a fact, not an opinion.
+    saved = saved_updates_text(decision)
+    if saved:
+        lines.append(saved + "\n")
+    lines.append(decision.get("why", "").strip())
 
     notes = decision.get("specialist_notes") or []
     if len(notes) > MAX_SPECIALISTS:
@@ -64,6 +122,10 @@ def render_segments(decision):
     and anything else that just wants one block of text); this is an
     additional view of the same decision, not a replacement."""
     segments = []
+
+    saved = saved_updates_text(decision)
+    if saved:
+        segments.append({"speaker": LOG, "text": saved})
 
     # Only `why` -- no plan_diff lines. See render_reply().
     head_text = decision.get("why", "").strip()

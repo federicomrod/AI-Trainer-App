@@ -136,6 +136,8 @@ enum SpeakerStyle {
         case "strength": return "dumbbell.fill"
         case "endurance": return "bolt.heart.fill"
         case "recovery": return "leaf.fill"
+        // Not a coach: this is the app reporting what it wrote down.
+        case "log": return "checkmark.circle.fill"
         default: return "person.fill"
         }
     }
@@ -146,7 +148,40 @@ enum SpeakerStyle {
         case "strength": return "Strength"
         case "endurance": return "Endurance"
         case "recovery": return "Recovery"
+        case "log": return "Saved"
         default: return speaker.capitalized
         }
     }
 }
+
+// MARK: - Keyboard
+
+#if os(iOS)
+/// Puts the keyboard away whatever has it.
+///
+/// Every screen that takes typing needs this, and not every field can
+/// dismiss itself: a decimal or number pad has no return key at all,
+/// and a multi-line field's return key inserts a newline. Without a
+/// way out, the keyboard sits over the tab bar and the app is stuck
+/// until it's force-quit -- which is exactly what happened on Coach.
+func dismissKeyboard() {
+    UIApplication.shared.sendAction(
+        #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+    )
+}
+
+extension View {
+    /// A Done button on the keyboard's own toolbar, shown only while
+    /// the keyboard is up. Use on screens with several fields, where
+    /// tracking focus per field would be noise; a single field is
+    /// clearer with @FocusState (see ChatView).
+    func keyboardDoneButton() -> some View {
+        toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { dismissKeyboard() }
+            }
+        }
+    }
+}
+#endif

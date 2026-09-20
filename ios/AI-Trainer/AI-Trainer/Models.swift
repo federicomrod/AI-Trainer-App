@@ -191,6 +191,12 @@ struct TurnResponse: Codable {
     let error: String?
     let errorDetail: String?
     let segments: [MessageSegment]
+    /// What this turn wrote to the sessions table, in plain words --
+    /// "Updated Mon (Push), Tue (Swim)." -- or nil when it wrote
+    /// nothing. Also arrives on a failed turn, because the write
+    /// happens before the model call: what was saved has to be named
+    /// either way. See server/session_corrections.py.
+    let savedUpdates: String?
 
     enum CodingKeys: String, CodingKey {
         case briefing, decision, reply
@@ -198,6 +204,7 @@ struct TurnResponse: Codable {
         case error
         case errorDetail = "error_detail"
         case segments
+        case savedUpdates = "saved_updates"
     }
 
     /// What to tell the athlete when this turn came back with an error.

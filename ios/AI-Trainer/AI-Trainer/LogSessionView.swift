@@ -132,6 +132,9 @@ struct LogSessionView: View {
                 }
             }
             .navigationTitle(viewModel.didSubmit ? "Logged" : "Log Session")
+            #if os(iOS)
+            .keyboardDoneButton()
+            #endif
             .toolbar {
                 if viewModel.didSubmit {
                     ToolbarItem(placement: .confirmationAction) {

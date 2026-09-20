@@ -10,6 +10,15 @@ from datetime import date, timedelta
 
 WEEKS_OF_HISTORY = 8
 
+# A session that actually happened. 'unplanned' belongs here: per
+# CLAUDE.md it means the session happened but wasn't on the plan, which
+# is still a session done. Leaving it out quietly undercounted two real
+# things -- every workout imported from HealthKit (healthkit_import.py
+# writes 'unplanned') and any off-plan day the athlete corrected in
+# chat -- so Progress showed fewer sessions than the athlete had
+# actually done.
+COMPLETED = "('done', 'partial', 'unplanned')"
+
 
 def get_progress(conn, today=None):
     if today is None:
@@ -57,7 +66,7 @@ def _longest_duration(conn, session_type):
     session has a real duration logged."""
     row = conn.execute(
         "SELECT MAX(duration_min) AS max_duration FROM sessions "
-        "WHERE type = ? AND status IN ('done', 'partial') "
+        f"WHERE type = ? AND status IN {COMPLETED} "
         "AND duration_min IS NOT NULL",
         (session_type,),
     ).fetchone()
@@ -72,7 +81,7 @@ def _sessions_this_week(conn, today):
     week_end = week_start + timedelta(days=6)
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM sessions WHERE date >= ? AND date <= ? "
-        "AND status IN ('done', 'partial')",
+        f"AND status IN {COMPLETED}",
         (week_start.isoformat(), week_end.isoformat()),
     ).fetchone()
     return row["n"]
@@ -100,7 +109,7 @@ def _lift_series(conn):
 
 
 def _weekly_session_counts(conn, today):
-    """Completed (done/partial) sessions per Mon-Sun week, for the
+    """Completed sessions (see COMPLETED) per Mon-Sun week, for the
     last WEEKS_OF_HISTORY weeks including the current one in
     progress. A plain count -- not a streak, not scored."""
     this_week_start = today - timedelta(days=today.weekday())
@@ -110,7 +119,7 @@ def _weekly_session_counts(conn, today):
         week_end = week_start + timedelta(days=6)
         row = conn.execute(
             "SELECT COUNT(*) AS n FROM sessions WHERE date >= ? AND date <= ? "
-            "AND status IN ('done', 'partial')",
+            f"AND status IN {COMPLETED}",
             (week_start.isoformat(), week_end.isoformat()),
         ).fetchone()
         counts.append({"week_start": week_start.isoformat(), "count": row["n"]})

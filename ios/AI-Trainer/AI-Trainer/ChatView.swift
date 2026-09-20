@@ -86,7 +86,11 @@ final class ChatViewModel: ObservableObject {
                 // planner_error or validation_error: nothing safe to
                 // show as the coach's reply. Surface it inline rather
                 // than pretending the exchange completed normally.
-                errorMessage = result.userFacingError ?? "No reply."
+                // Name what was written even though the reply failed
+                // -- the rows are already in the database.
+                errorMessage = [result.savedUpdates, result.userFacingError ?? "No reply."]
+                    .compactMap { $0 }
+                    .joined(separator: "\n\n")
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -100,6 +104,12 @@ struct ChatView: View {
     // Owned here, not by the button, so the send arrow can finish a
     // recording in progress rather than sending around it.
     @StateObject private var voice = SpeechRecognizer()
+    /// Whether the typing field holds the keyboard. Tracked explicitly
+    /// because the keyboard covers the tab bar while it's up: with no
+    /// way to put it away, the app was unusable until it was
+    /// force-quit. Three ways out now -- Done on the keyboard's own
+    /// toolbar, dragging the conversation, and sending.
+    @FocusState private var draftFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -129,6 +139,7 @@ struct ChatView: View {
                 }
                 .scrollContentBackground(.hidden)
                 .appBackground()
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: viewModel.messages.count) {
                     scrollToBottom(proxy)
                 }
@@ -137,6 +148,14 @@ struct ChatView: View {
                 }
             }
             .navigationTitle("Coach")
+            .toolbar {
+                // Only shown while the keyboard is up, which is exactly
+                // when it's needed.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { draftFocused = false }
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 0) {
                     attachmentPreview
@@ -289,6 +308,7 @@ struct ChatView: View {
             // smaller now that voice leads.
             HStack(spacing: 8) {
                 TextField("Or type…", text: $viewModel.draft, axis: .vertical)
+                    .focused($draftFocused)
                     .textFieldStyle(.plain)
                     .font(.subheadline)
                     .padding(9)
@@ -305,6 +325,7 @@ struct ChatView: View {
                     if voice.isActive {
                         Task { await voice.finish() }
                     } else {
+                        draftFocused = false
                         Task { await viewModel.send() }
                     }
                 } label: {

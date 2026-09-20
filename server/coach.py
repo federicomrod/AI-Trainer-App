@@ -17,6 +17,7 @@ from typing import Optional
 import planner
 import render
 import safety
+import session_corrections
 import session_note_parser
 import validation
 from briefing import build_briefing
@@ -31,6 +32,12 @@ class TurnResult:
     error: Optional[str] = None       # "planner_error" | "validation_error" | None
     error_detail: Optional[str] = None
     segments: list = None             # [{"speaker": ..., "text": ...}, ...]
+    # What this turn wrote to `sessions` from the message, in words --
+    # "Updated Mon (Push), Tue (Swim)." or None. Carried separately as
+    # well as inside the decision because the write happens before the
+    # model call: if the call then fails, the athlete still has to be
+    # told what was saved. A silent write is the bug this replaced.
+    saved_updates: Optional[str] = None
 
     def __post_init__(self):
         if self.segments is None:
@@ -165,7 +172,6 @@ def run_turn(conn, message, image_base64=None):
     returns a TurnResult; never raises. The caller decides how to
     display it."""
     message = (message or "").strip()
-    briefing_text = build_briefing(conn)
 
     if message or image_base64:
         # The image itself isn't stored -- it's consumed by this one
@@ -173,8 +179,6 @@ def run_turn(conn, message, image_base64=None):
         # directly" implies no separate image store. Anything from it
         # worth keeping comes back through memory_to_add instead.
         _save_message(conn, "user", message or "(shared a screenshot)")
-        if message:
-            _attach_session_note(conn, message)
 
     # --- Hard safety pre-check. Runs before anything else, and skips
     # the model call entirely if it trips. ---
@@ -182,10 +186,31 @@ def run_turn(conn, message, image_base64=None):
         decision = _fabricated_safety_decision()
         _save_message(conn, "assistant", json.dumps(decision))
         return TurnResult(
-            briefing=briefing_text, decision=decision,
+            briefing=build_briefing(conn), decision=decision,
             reply=reply_text_for(decision), safety_flagged=True,
             segments=segments_for(decision),
         )
+
+    # --- What actually happened, before deciding what happens next. ---
+    # Corrections to earlier days are written to `sessions` first, so
+    # the briefing below is built from the athlete's real history
+    # rather than the version the planner is about to be told is wrong.
+    # Before this, a message correcting five days changed the planner's
+    # answer for today and nothing else: nothing was saved, Week and
+    # Progress stayed empty, and the same correction had to be repeated
+    # tomorrow. See session_corrections.py.
+    applied_updates = {"applied": [], "rejected": []}
+    if message:
+        applied_updates = session_corrections.update_sessions_from_message(
+            conn, message, date.today().isoformat()
+        )
+        _attach_session_note(conn, message)
+
+    saved_updates = render.saved_updates_text(
+        {"_applied_updates": applied_updates}
+    )
+
+    briefing_text = build_briefing(conn)
 
     # --- The one model call. ---
     try:
@@ -194,6 +219,7 @@ def run_turn(conn, message, image_base64=None):
         return TurnResult(
             briefing=briefing_text, decision=None, reply=None,
             safety_flagged=False, error="planner_error", error_detail=str(e),
+            saved_updates=saved_updates,
         )
 
     # --- Hard validation, after the call. ---
@@ -205,6 +231,7 @@ def run_turn(conn, message, image_base64=None):
         return TurnResult(
             briefing=briefing_text, decision=decision, reply=None,
             safety_flagged=False, error="validation_error", error_detail=str(e),
+            saved_updates=saved_updates,
         )
 
     # A silent check (no new message, no screenshot -- Today's own
@@ -224,10 +251,17 @@ def run_turn(conn, message, image_base64=None):
                 segments=segments_for(last),
             )
 
+    # Saved inside the decision so chat history renders the same
+    # confirmation later -- same internal-marker convention as
+    # `_precheck_only`. render.saved_updates_text() turns it into the
+    # "Updated Mon (Push), Tue (Swim)" line.
+    if applied_updates["applied"] or applied_updates["rejected"]:
+        decision["_applied_updates"] = applied_updates
+
     _save_message(conn, "assistant", json.dumps(decision))
 
     return TurnResult(
         briefing=briefing_text, decision=decision,
         reply=reply_text_for(decision), safety_flagged=False,
-        segments=segments_for(decision),
+        segments=segments_for(decision), saved_updates=saved_updates,
     )

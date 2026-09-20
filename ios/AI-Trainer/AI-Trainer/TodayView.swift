@@ -115,7 +115,11 @@ final class TodayViewModel: ObservableObject {
                 // It answered -- it just couldn't produce a session.
                 errorTitle = "The coach couldn't answer"
                 errorSymbol = "exclamationmark.triangle"
-                errorMessage = problem
+                // Corrections are written before the model call, so
+                // say what was saved even when the answer failed.
+                errorMessage = [result.savedUpdates, problem]
+                    .compactMap { $0 }
+                    .joined(separator: "\n\n")
             } else {
                 // Only remember a decision that's actually usable --
                 // caching an error would mean opening to it tomorrow.
@@ -162,6 +166,9 @@ struct TodayView: View {
     @State private var showingGoals = false
     @State private var showingSettings = false
     @State private var showingWhyDetail = false
+    /// See ChatView: the keyboard covers the tab bar, so there has to
+    /// be a way to put it away.
+    @FocusState private var draftFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -180,7 +187,12 @@ struct TodayView: View {
             .appBackground()
             .scrollContentBackground(.hidden)
             .navigationTitle("Today")
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { draftFocused = false }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingLogSession = true
@@ -531,6 +543,7 @@ struct TodayView: View {
             // what today should look like.
             HStack(spacing: 8) {
                 TextField("Or type: what's going on?", text: $viewModel.messageDraft, axis: .vertical)
+                    .focused($draftFocused)
                     .textFieldStyle(.plain)
                     .font(.subheadline)
                     .padding(9)
@@ -547,6 +560,7 @@ struct TodayView: View {
                     if voice.isActive {
                         Task { await voice.finish() }
                     } else {
+                        draftFocused = false
                         Task { await viewModel.sendDraft() }
                     }
                 } label: {

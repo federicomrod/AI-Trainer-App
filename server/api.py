@@ -121,6 +121,9 @@ class TurnResponse(BaseModel):
     error: Optional[str]
     error_detail: Optional[str]
     segments: List[MessageSegment] = []
+    # Plain-language list of what this turn wrote to `sessions`, or
+    # None. Present even when the turn errored -- see TurnResult.
+    saved_updates: Optional[str] = None
 
 
 class ChatMessage(BaseModel):
@@ -534,4 +537,5 @@ def post_turn(req: TurnRequest):
         error=result.error,
         error_detail=result.error_detail,
         segments=result.segments,
+        saved_updates=result.saved_updates,
     )

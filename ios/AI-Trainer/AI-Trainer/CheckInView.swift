@@ -111,6 +111,9 @@ struct CheckInView: View {
                 }
             }
             .navigationTitle("Check In")
+            #if os(iOS)
+            .keyboardDoneButton()
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
