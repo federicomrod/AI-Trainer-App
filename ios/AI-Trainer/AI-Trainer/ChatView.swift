@@ -24,6 +24,12 @@ final class ChatViewModel: ObservableObject {
     @Published var photoPickerItem: PhotosPickerItem?
     #if os(iOS)
     @Published var attachedImage: UIImage?
+    /// Screenshots already sent, by the message id they were sent
+    /// with, so the bubble can show what went with the message. The
+    /// backend doesn't store the image (it's consumed by the one model
+    /// call), so this only lasts as long as the screen does -- a
+    /// reload from history shows the text alone.
+    @Published var sentImages: [Int: UIImage] = [:]
     #endif
 
     private let client = APIClient()
@@ -69,6 +75,7 @@ final class ChatViewModel: ObservableObject {
 
         #if os(iOS)
         let imageBase64 = attachedImage?.jpegBase64ForUpload()
+        if let image = attachedImage { sentImages[placeholderID] = image }
         attachedImage = nil
         #else
         let imageBase64: String? = nil
@@ -212,7 +219,12 @@ struct ChatView: View {
     @ViewBuilder
     private func exchange(_ message: ChatMessage) -> some View {
         if message.isUser {
+            #if os(iOS)
+            bubble(text: message.text, isUser: true,
+                   image: viewModel.sentImages[message.id])
+            #else
             bubble(text: message.text, isUser: true)
+            #endif
         } else if message.segments.isEmpty {
             // Defensive fallback -- shouldn't happen once the backend
             // always returns segments, but a message with no segments
@@ -230,17 +242,31 @@ struct ChatView: View {
     // Rounder, softer, tighter padding than a generic chat-UI bubble --
     // borrowing iMessage/WhatsApp's instinct that a message from a
     // person is compact and gently shaped, not a wide rectangular card.
-    private func bubble(text: String, isUser: Bool) -> some View {
+    private func bubble(text: String, isUser: Bool, image: UIImage? = nil) -> some View {
         HStack {
             if isUser { Spacer(minLength: 50) }
-            Text(text)
-                .foregroundStyle(isUser ? Theme.background : Theme.textPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    isUser ? Theme.accent : Theme.card,
-                    in: RoundedRectangle(cornerRadius: 20)
-                )
+            VStack(alignment: .trailing, spacing: 6) {
+                // The screenshot rides inside the bubble, so "I sent a
+                // picture" is something you can see rather than take on
+                // faith -- previously the only sign was the word
+                // "Screenshot" in the text.
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: 180, maxHeight: 180)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .accessibilityLabel("Screenshot sent with this message")
+                }
+                Text(text)
+                    .foregroundStyle(isUser ? Theme.background : Theme.textPrimary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                isUser ? Theme.accent : Theme.card,
+                in: RoundedRectangle(cornerRadius: 20)
+            )
             if !isUser { Spacer(minLength: 50) }
         }
     }

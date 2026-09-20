@@ -69,6 +69,92 @@ def section_profile(conn):
     return "\n".join(lines)
 
 
+def section_today(conn, today):
+    """What is true about *today*, stated once, at the top.
+
+    This section did not exist, and its absence was the root of a
+    whole family of problems. LAST 14 DAYS stops at yesterday and
+    THIS WEEK'S PLAN lists only `planned` rows, so a session already
+    logged today appeared nowhere at all: the coach could only propose
+    one, and would cheerfully re-plan a day the athlete had already
+    trained. With nothing here to anchor to, "today" in a message had
+    no date attached to it either, and the nearest same-type day in
+    the last-14-days window was the only thing it could match.
+
+    So: today's real date, what's on record for it, and the numbers
+    logged against it -- spelled out rather than left to be inferred
+    from a list of other days.
+    """
+    iso = today.isoformat()
+    lines = [f"TODAY — {_fmt_date(iso)}"]
+    lines.append(
+        f'Any mention of "today", "this morning", "just did", or no date at '
+        f"all means {iso}, and never another day that happens to be the same "
+        f"kind of session."
+    )
+
+    row = conn.execute(
+        "SELECT * FROM sessions WHERE date = ? ORDER BY id LIMIT 1", (iso,)
+    ).fetchone()
+    if row is None:
+        lines.append("Nothing on record for today yet — nothing planned, "
+                     "nothing logged.")
+    elif row["status"] in ("done", "partial", "unplanned"):
+        summary = row["actual_summary"] or "(no detail given)"
+        extras = []
+        if row["duration_min"]:
+            extras.append(f"{row['duration_min']} min")
+        if row["rpe"]:
+            extras.append(f"RPE {row['rpe']}")
+        suffix = f"  [{', '.join(extras)}]" if extras else ""
+        lines.append(
+            f"ALREADY TRAINED TODAY — logged as {row['status']}: "
+            f"{row['type']} — {summary}{suffix}"
+        )
+        lines.append(
+            "Today is finished. You are reviewing it with them, not "
+            "planning it. Do not propose or re-explain today's session as "
+            "something still to come."
+        )
+        if row["notes"]:
+            lines.append(f"Note on today: {row['notes']}")
+    elif row["status"] == "skipped":
+        lines.append(f"Today was planned as {row['type']} and is marked "
+                     f"skipped: {row['planned_summary'] or '(no detail)'}")
+    else:
+        lines.append(f"Planned for today: {row['type']} — "
+                     f"{row['planned_summary'] or '(no detail yet)'} "
+                     f"(not logged yet)")
+
+    lifts = conn.execute(
+        "SELECT exercise_name, weight, reps, sets, note FROM lifts "
+        "WHERE date = ? ORDER BY id", (iso,)
+    ).fetchall()
+    if lifts:
+        lines.append("Numbers already logged today (do not ask for these "
+                     "again):")
+        for lift in lifts:
+            lines.append(f"  {_fmt_lift(lift)}")
+    return "\n".join(lines)
+
+
+def _fmt_lift(row):
+    """"Back Squat 100kg 3 x 5 (felt heavy)" from a lifts row."""
+    parts = []
+    if row["weight"] is not None:
+        weight = row["weight"]
+        parts.append(f"{int(weight) if weight == int(weight) else weight}kg")
+    if row["sets"] is not None and row["reps"] is not None:
+        parts.append(f"{row['sets']} x {row['reps']}")
+    elif row["reps"] is not None:
+        parts.append(f"x{row['reps']}")
+    detail = " ".join(parts)
+    text = f"{row['exercise_name']} {detail}".strip()
+    if row["note"]:
+        text += f" ({row['note']})"
+    return text
+
+
 def section_last_14_days(conn, today):
     since = (today - timedelta(days=LOOKBACK_DAYS)).isoformat()
     until = (today - timedelta(days=1)).isoformat()
@@ -78,7 +164,8 @@ def section_last_14_days(conn, today):
         (since, until),
     ).fetchall()
 
-    lines = [f"LAST {LOOKBACK_DAYS} DAYS (planned vs. actual)"]
+    lines = [f"LAST {LOOKBACK_DAYS} DAYS (planned vs. actual; up to "
+             f"yesterday — today is in its own section above)"]
     if not rows:
         lines.append("(no sessions logged)")
         return "\n".join(lines)
@@ -266,6 +353,7 @@ def build_briefing(conn, today=None):
 
     sections = [
         f"BRIEFING — {_fmt_date(today.isoformat())}",
+        section_today(conn, today),
         section_profile(conn),
         section_last_14_days(conn, today),
         section_this_week(conn, today),

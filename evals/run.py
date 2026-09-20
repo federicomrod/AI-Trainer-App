@@ -42,6 +42,13 @@ def _prepare(scenario, db_path, today):
             "VALUES (?, ?, ?, ?, 'manual')",
             (day, session_type, status, summary),
         )
+    for days_ago, name, weight, reps, sets in scenario.lifts:
+        conn.execute(
+            "INSERT INTO lifts (date, exercise_name, weight, reps, sets) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ((today - timedelta(days=days_ago)).isoformat(), name, weight,
+             reps, sets),
+        )
     for role, content in scenario.messages:
         conn.execute(
             "INSERT INTO messages (role, content) VALUES (?, ?)", (role, content)

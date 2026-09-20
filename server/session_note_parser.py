@@ -8,9 +8,11 @@ this closes and why it's a separate small model call, same shape as
 lift_parser.py.
 """
 
+from datetime import date
 from pathlib import Path
 
 import planner
+import session_corrections
 from providers import PlannerError
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "session-note-parser.md"
@@ -36,8 +38,12 @@ def parse_session_note(conn, message, today_iso):
     if not message:
         return None
 
+    # Today included. It used to be `date < today`, which meant a
+    # remark about today's session had nowhere correct to land and the
+    # nearest older day of the same type was the only candidate --
+    # exactly the mis-attribution this parser is supposed to avoid.
     rows = conn.execute(
-        "SELECT date, type FROM sessions WHERE date < ? ORDER BY date DESC LIMIT ?",
+        "SELECT date, type FROM sessions WHERE date <= ? ORDER BY date DESC LIMIT ?",
         (today_iso, RECENT_SESSIONS_LIMIT),
     ).fetchall()
     if not rows:
@@ -52,8 +58,14 @@ def parse_session_note(conn, message, today_iso):
     except PlannerError:
         return None
 
-    date, note = result.get("date"), result.get("note")
+    found_date, note = result.get("date"), result.get("note")
+    if found_date and note:
+        # Same rule as session_corrections: the athlete's own "today"
+        # or "yesterday" outranks whatever date came back.
+        found_date, _ = session_corrections.anchor_date(
+            f"{message} {note}", found_date, date.fromisoformat(today_iso)
+        )
     known_dates = {r["date"] for r in rows}
-    if not date or not note or date not in known_dates:
+    if not found_date or not note or found_date not in known_dates:
         return None
-    return {"date": date, "note": note}
+    return {"date": found_date, "note": note}

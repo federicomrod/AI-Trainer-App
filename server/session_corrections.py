@@ -34,6 +34,7 @@ import re
 from datetime import date, timedelta
 from pathlib import Path
 
+import lift_parser
 import planner
 from providers import PlannerError
 
@@ -114,6 +115,38 @@ _PULL_EVIDENCE = re.compile(
     r"dumbbell|cable|back)\b",
     re.IGNORECASE,
 )
+
+
+# Words that pin a day down by themselves. Whatever date the model
+# returns, a day the athlete described with one of these is that day --
+# "today's push" must never land on last Tuesday's push because the
+# session type matched. Checked in code because it is not a judgement
+# call; it is arithmetic.
+_TODAY_WORDS = re.compile(
+    r"\b(today|today's|this\s+(morning|afternoon|evening)|just\s+(did|"
+    r"finished|got\s+back)|this\s+session)\b",
+    re.IGNORECASE,
+)
+_YESTERDAY_WORDS = re.compile(r"\b(yesterday|yesterday's|last\s+night)\b",
+                              re.IGNORECASE)
+
+
+def anchor_date(text, model_date, today):
+    """The date a day's words actually refer to.
+
+    Returns (date, was_corrected). An explicit "today" or "yesterday"
+    wins over whatever the extraction returned; anything else is left
+    alone.
+    """
+    if not text:
+        return model_date, False
+    if _TODAY_WORDS.search(text):
+        anchored = today.isoformat()
+    elif _YESTERDAY_WORDS.search(text):
+        anchored = (today - timedelta(days=1)).isoformat()
+    else:
+        return model_date, False
+    return anchored, anchored != model_date
 
 
 def _sounds_ambiguous(text):
@@ -246,6 +279,13 @@ def _check(correction, today):
         return None, "not a correction"
 
     raw_date = (correction.get("date") or "").strip()
+    # "today"/"yesterday" in the athlete's own words beat the model's
+    # date, always.
+    raw_date, _ = anchor_date(
+        " ".join(part for part in (correction.get("heard"),
+                                   correction.get("summary")) if part),
+        raw_date, today,
+    )
     try:
         when = date.fromisoformat(raw_date)
     except ValueError:
@@ -285,6 +325,52 @@ def _check(correction, today):
     }, None
 
 
+_HAS_NUMBER = re.compile(r"\d")
+
+
+def _record_lifts(conn, day_iso, text):
+    """Store any real exercise numbers the athlete mentioned for this
+    day in `lifts`, where the briefing reads them from.
+
+    Without this, "Tuesday was pull, 3x10 lat pulldown at 55" kept the
+    whole sentence as one line of free text and nothing else. The
+    numbers were in the conversation but not in the database, so the
+    coach would turn around and ask for them -- and Progress had
+    nothing to chart. Same extraction the logging screen uses
+    (lift_parser.py), so one exercise keeps one name.
+
+    Skipped entirely when the text has no digits in it, which is most
+    of the time -- no point spending a model call on "felt good".
+    """
+    if not text or not _HAS_NUMBER.search(text):
+        return []
+    recorded = []
+    for lift in lift_parser.parse_lifts(conn, text):
+        name = (lift.get("exercise_name") or "").strip()
+        if not name:
+            continue
+        existing = conn.execute(
+            "SELECT id FROM lifts WHERE date = ? AND lower(exercise_name) = ?",
+            (day_iso, name.lower()),
+        ).fetchone()
+        values = (lift.get("weight"), lift.get("reps"), lift.get("sets"),
+                  lift.get("note"))
+        if existing is None:
+            conn.execute(
+                "INSERT INTO lifts (date, exercise_name, weight, reps, sets, note) "
+                "VALUES (?, ?, ?, ?, ?, ?)", (day_iso, name) + values
+            )
+        else:
+            # Re-stating the same lift for the same day is a
+            # correction of it, not a second set of it.
+            conn.execute(
+                "UPDATE lifts SET weight = ?, reps = ?, sets = ?, note = ? "
+                "WHERE id = ?", values + (existing["id"],)
+            )
+        recorded.append(name)
+    return recorded
+
+
 def apply_corrections(conn, corrections, today_iso, already_asked=()):
     """Write the confident corrections to `sessions` and return
     ({"applied": [...], "rejected": [...], "unresolved": [...]}).
@@ -306,7 +392,7 @@ def apply_corrections(conn, corrections, today_iso, already_asked=()):
     answer_resolves_the_question.
     """
     today = date.fromisoformat(today_iso)
-    applied, rejected, unresolved = [], [], []
+    applied, rejected, unresolved, unchanged = [], [], [], []
     seen = {}
 
     for correction in corrections or []:
@@ -316,6 +402,19 @@ def apply_corrections(conn, corrections, today_iso, already_asked=()):
             continue
         options = (None if clean["date"] in already_asked
                    else _confidence_problem(clean, correction))
+        if options is not None:
+            settled = conn.execute(
+                "SELECT type FROM sessions WHERE date = ? AND status IN "
+                "('done', 'partial', 'unplanned') ORDER BY id LIMIT 1",
+                (clean["date"],),
+            ).fetchone()
+            if settled is not None and settled["type"] in options:
+                # They already answered this once. A resend of the
+                # original message -- a retry after a dropped
+                # connection, say -- must not ask again, and must not
+                # overwrite the answer with the guess it replaced.
+                unchanged.append({"date": clean["date"], "type": settled["type"]})
+                continue
         if options is not None:
             unresolved.append({
                 "date": clean["date"],
@@ -351,12 +450,18 @@ def apply_corrections(conn, corrections, today_iso, already_asked=()):
                 (clean["type"], clean["status"], clean["summary"],
                  clean["duration_min"], row["id"]),
             )
+        clean["lifts"] = _record_lifts(
+            conn,
+            clean["date"],
+            " ".join(part for part in (clean["heard"], clean["summary"]) if part),
+        )
         applied.append(clean)
 
     if applied:
         conn.commit()
     unresolved.sort(key=lambda u: u["date"])
-    return {"applied": applied, "rejected": rejected, "unresolved": unresolved}
+    return {"applied": applied, "rejected": rejected,
+            "unresolved": unresolved, "unchanged": unchanged}
 
 
 def dates_already_asked(conn):
@@ -381,5 +486,6 @@ def update_sessions_from_message(conn, message, today_iso):
     already_asked = dates_already_asked(conn)
     corrections = parse_corrections(conn, message, today_iso)
     if not corrections:
-        return {"applied": [], "rejected": [], "unresolved": []}
+        return {"applied": [], "rejected": [], "unresolved": [],
+                "unchanged": []}
     return apply_corrections(conn, corrections, today_iso, already_asked)

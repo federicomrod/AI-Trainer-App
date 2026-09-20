@@ -117,6 +117,89 @@ def _attach_session_note(conn, message):
     conn.commit()
 
 
+# How long a resend of the same words counts as the same request
+# rather than the athlete saying it again. Long enough to cover a
+# network failure and a retry; short enough that genuinely repeating
+# yourself ten minutes later still gets an answer.
+REPEAT_WINDOW_MINUTES = 10
+
+
+def _reply_already_given(conn, message):
+    """The decision already produced for this exact message a moment
+    ago, if there is one.
+
+    A turn is expensive and has side effects -- it writes sessions
+    rows and can ask a clarifying question. When a request is retried
+    after a dropped connection, the phone sends the identical text
+    again, and without this the athlete gets asked a second time about
+    something they already answered, and pays for a second model call
+    to be told so. Matching on the exact text within a short window is
+    the boring version of a request id, and needs no new table.
+    """
+    if not message:
+        return None
+    row = conn.execute(
+        "SELECT id FROM messages WHERE role = 'user' AND content = ? "
+        f"AND timestamp >= datetime('now', '-{REPEAT_WINDOW_MINUTES} minutes') "
+        "ORDER BY id DESC LIMIT 1",
+        (message,),
+    ).fetchone()
+    if row is None:
+        return None
+    reply = conn.execute(
+        "SELECT content FROM messages WHERE role = 'assistant' AND id > ? "
+        "ORDER BY id ASC LIMIT 1",
+        (row["id"],),
+    ).fetchone()
+    if reply is None:
+        return None
+    try:
+        return json.loads(reply["content"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def _day_is_settled(conn, day):
+    """Is this day now on record as something that happened?"""
+    return conn.execute(
+        "SELECT 1 FROM sessions WHERE date = ? AND status IN "
+        "('done', 'partial', 'unplanned') LIMIT 1", (day,)
+    ).fetchone() is not None
+
+
+def _drop_answered_questions(conn, decision):
+    """A replayed answer must not re-ask what has since been answered.
+
+    The stored decision still carries the question it asked at the
+    time. Replaying it verbatim after the athlete has already told us
+    which session it was would put the same question back on screen
+    with the answer sitting in the database -- the exact "it asked me
+    again" the retry path is supposed to prevent.
+    """
+    updates = decision.get("_applied_updates") or {}
+    unresolved = updates.get("unresolved") or []
+    still_open = [u for u in unresolved
+                  if not _day_is_settled(conn, u.get("date"))]
+    if len(still_open) == len(unresolved):
+        return decision
+
+    replayed = dict(decision)
+    asked_then = render.unresolved_question(updates)
+    remaining_updates = {**updates, "unresolved": still_open}
+    replayed["_applied_updates"] = remaining_updates
+
+    # Strip the confirmation question, keeping anything the planner
+    # itself asked alongside it.
+    question = (decision.get("question") or "").strip()
+    if asked_then and question.startswith(asked_then):
+        question = question[len(asked_then):].strip()
+    asked_now = render.unresolved_question(remaining_updates)
+    replayed["question"] = "\n\n".join(
+        part for part in (asked_now, question) if part
+    ) or None
+    return replayed
+
+
 def _last_assistant_decision_today(conn):
     """The most recently saved assistant decision from today, if any
     -- used to tell a genuinely new call apart from the athlete just
@@ -173,6 +256,18 @@ def run_turn(conn, message, image_base64=None):
     display it."""
     message = (message or "").strip()
 
+    # A retry of a message already answered replays that answer rather
+    # than running the whole turn again. See _reply_already_given().
+    if message and not image_base64:
+        previous = _reply_already_given(conn, message)
+        if previous is not None:
+            previous = _drop_answered_questions(conn, previous)
+            return TurnResult(
+                briefing=build_briefing(conn), decision=previous,
+                reply=reply_text_for(previous), safety_flagged=False,
+                segments=segments_for(previous),
+            )
+
     if message or image_base64:
         # The image itself isn't stored -- it's consumed by this one
         # call, same as CLAUDE.md's "send the image to the model
@@ -199,7 +294,8 @@ def run_turn(conn, message, image_base64=None):
     # answer for today and nothing else: nothing was saved, Week and
     # Progress stayed empty, and the same correction had to be repeated
     # tomorrow. See session_corrections.py.
-    applied_updates = {"applied": [], "rejected": [], "unresolved": []}
+    applied_updates = {"applied": [], "rejected": [], "unresolved": [],
+                       "unchanged": []}
     if message:
         applied_updates = session_corrections.update_sessions_from_message(
             conn, message, date.today().isoformat()

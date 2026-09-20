@@ -26,6 +26,8 @@ class Scenario:
     #: (role, content) rows written before the turn -- for scenarios
     #: where the message only makes sense as a reply.
     messages: List[tuple] = field(default_factory=list)
+    #: (days_ago, exercise_name, weight, reps, sets) rows in `lifts`.
+    lifts: List[tuple] = field(default_factory=list)
     #: name -> check(result, conn, today) -> None when it passes, or a
     #: string saying what was wrong.
     checks: Dict[str, Callable] = field(default_factory=dict)
@@ -201,6 +203,127 @@ SCENARIOS = [
         ],
         checks={
             "Tuesday is saved as pull": _tuesday_saved_as("pull"),
+        },
+    ),
+]
+
+
+# --- "today" is a date, not a session type --------------------------
+
+def _today_row(conn, today):
+    return _row(conn, today)
+
+
+def _today_is_written(result, conn, today):
+    row = _today_row(conn, today)
+    if row is None:
+        return ("nothing was written for today; the session the athlete "
+                "said they just finished has to land on today's date")
+    if row["type"] != "push":
+        return f"today was written as {row['type']!r}, expected 'push'"
+    if row["status"] not in ("done", "partial", "unplanned"):
+        return f"today's status is {row['status']!r}, expected it to be done"
+    return None
+
+
+def _old_push_day_untouched(result, conn, today):
+    """The trap: an older day of the same type, sitting right there."""
+    older = today - timedelta(days=5)
+    row = _row(conn, older)
+    if row is None:
+        return "the older push day disappeared entirely"
+    if row["actual_summary"] != "push - bench 80kg 3x8":
+        return (f"the older push day was overwritten with "
+                f"{row['actual_summary']!r} -- 'today' was matched onto it")
+    return None
+
+
+def _todays_numbers_stored(result, conn, today):
+    rows = conn.execute(
+        "SELECT exercise_name, weight FROM lifts WHERE date = ?",
+        (today.isoformat(),),
+    ).fetchall()
+    if not rows:
+        return ("no numbers were stored for today; the exercise detail in "
+                "the message was kept only as free text")
+    if not any(r["weight"] == 82.5 for r in rows):
+        return (f"stored {[(r['exercise_name'], r['weight']) for r in rows]}, "
+                f"expected the 82.5kg the athlete gave")
+    return None
+
+
+def _keeps_the_finished_session(result, conn, today):
+    decision = result.decision or {}
+    if decision.get("decision") != "KEEP":
+        return (f"decision is {decision.get('decision')!r}; a day that's "
+                f"already been trained isn't something to MODIFY or REST")
+    kind = (decision.get("today") or {}).get("type", "")
+    if "push" not in kind.lower():
+        return f"today came back as {kind!r}, not the push that was logged"
+    return None
+
+
+def _does_not_ask(result, conn, today):
+    question = (result.decision or {}).get("question")
+    if question:
+        return f"asked for something it already had: {question!r}"
+    return None
+
+
+def _no_second_row_for_today(result, conn, today):
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM sessions WHERE date = ?",
+        (today.isoformat(),),
+    ).fetchone()["n"]
+    if n != 1:
+        return f"{n} rows for today; a review must not create another one"
+    return None
+
+
+def _numbers_reach_the_coach(result, conn, today):
+    if "82.5" not in (result.briefing or ""):
+        return ("today's logged numbers aren't in the briefing, so the coach "
+                "has no way to know it already has them")
+    return None
+
+
+SCENARIOS += [
+    Scenario(
+        name="today_is_a_date_not_a_type",
+        about=("'Today's push' has to land on today, even with an older "
+               "push day sitting in the same window to be matched onto."),
+        message="Just finished today's push - bench 82.5 for 3 sets of 8.",
+        profile=DEFAULT_PROFILE,
+        sessions=[(5, "push", "done", "push - bench 80kg 3x8")],
+        checks={
+            "today is written": _today_is_written,
+            "last week's push is untouched": _old_push_day_untouched,
+            "the numbers given are stored": _todays_numbers_stored,
+        },
+    ),
+    Scenario(
+        name="already_trained_is_reviewed",
+        about=("Opening the app after training must not produce a proposal "
+               "for a session that already happened."),
+        message="",
+        profile=DEFAULT_PROFILE,
+        sessions=[(0, "push", "done", "bench 82.5kg 3x8, incline db 30s 3x10")],
+        checks={
+            "the finished session is kept": _keeps_the_finished_session,
+            "no second row for today": _no_second_row_for_today,
+        },
+    ),
+    Scenario(
+        name="detail_is_not_re_asked",
+        about=("Numbers given once are in the database, so the coach has "
+               "them and never asks for them again."),
+        message="How did that compare to last time?",
+        profile=DEFAULT_PROFILE,
+        sessions=[(0, "push", "done", "bench 82.5kg 3x8")],
+        lifts=[(0, "Bench Press", 82.5, 8, 3), (7, "Bench Press", 80.0, 8, 3)],
+        checks={
+            "the numbers are in the briefing": _numbers_reach_the_coach,
+            "nothing is asked again": _does_not_ask,
         },
     ),
 ]

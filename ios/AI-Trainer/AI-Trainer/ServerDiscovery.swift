@@ -73,6 +73,17 @@ enum ServerDiscovery {
                 return url
             }
         }
+        // Nothing answered quickly. Before falling back to Bonjour and
+        // then to the offline screen, give the deployed backend one
+        // slow try: a host that sleeps when idle needs longer than a
+        // laptop on the same Wi-Fi, and a cold start must never look
+        // like an outage.
+        if let deployed = Config.backendCandidates.first,
+           deployed.scheme == "https",
+           await isLiveBackend(deployed, timeout: Config.coldStartProbeTimeout) {
+            cache(deployed)
+            return deployed
+        }
         return await discover()
     }
 

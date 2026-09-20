@@ -17,12 +17,17 @@ detail can show it without hunting through the conversation.
 ---
 
 You will be given today's date, a short list of the athlete's recent
-sessions (date and type), and one new message from them.
+sessions (date and type), and one new message from them. The list
+includes today.
 
 Decide: does this message clearly reference a *specific* one of those
-recent sessions -- by day name, relative date ("yesterday", "Tuesday"),
-or session type tied to a date you can match against the list -- and
-say something worth keeping about it?
+sessions -- by day name, relative date ("yesterday", "Tuesday"), or
+session type tied to a date you can match against the list -- and say
+something worth keeping about it?
+
+"Today", "this morning", "just did", or no date at all means today's
+date, even when an earlier day in the list is the same kind of
+session. Never reach past today for a type match.
 
 If yes: return that session's exact date (matching the list) and a
 short note (one sentence, the athlete's own point, not a

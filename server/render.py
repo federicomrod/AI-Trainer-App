@@ -57,11 +57,21 @@ def saved_updates_text(decision):
             detail += f", {entry['duration_min']} min"
         if entry.get("status") and entry["status"] != "done":
             detail += f", {entry['status']}"
+        if entry.get("lifts"):
+            # Named so the athlete can see the numbers landed, not just
+            # the day -- the detail they gave is the part most easily
+            # lost, and the part they hate repeating.
+            detail += f", {', '.join(entry['lifts'])} logged"
         parts.append(f"{_day_label(entry.get('date'))} ({detail})")
 
     lines = []
     if parts:
         lines.append("Updated " + ", ".join(parts) + ".")
+    for entry in updates.get("unchanged") or []:
+        lines.append(
+            f"{_day_label(entry.get('date'))} was already saved as "
+            f"{(entry.get('type') or '').capitalize()} — left as it was."
+        )
     if rejected:
         # Named, not swallowed: an athlete who said something about a
         # day should never have to guess whether it landed.

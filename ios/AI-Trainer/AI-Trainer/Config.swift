@@ -72,6 +72,14 @@ enum Config {
     /// because a deployed host may be waking from idle.
     static let reachabilityProbeTimeout: TimeInterval = 8
 
+    /// Second chance for the deployed backend before deciding it isn't
+    /// there. A host that sleeps when idle takes several seconds to
+    /// come back, and the short probe above is tuned for a machine on
+    /// the LAN that either answers at once or isn't home. Without
+    /// this, the first launch of the day could show "can't reach your
+    /// coach" for a backend that was simply waking up.
+    static let coldStartProbeTimeout: TimeInterval = 25
+
     // MARK: - Voice
 
     /// How often a recording hands over to a fresh recognition task, so
