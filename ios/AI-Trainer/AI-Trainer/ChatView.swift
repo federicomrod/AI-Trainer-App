@@ -140,6 +140,7 @@ struct ChatView: View {
                 .scrollContentBackground(.hidden)
                 .appBackground()
                 .scrollDismissesKeyboard(.interactively)
+                .onTapGesture { draftFocused = false }
                 .onChange(of: viewModel.messages.count) {
                     scrollToBottom(proxy)
                 }
@@ -148,14 +149,6 @@ struct ChatView: View {
                 }
             }
             .navigationTitle("Coach")
-            .toolbar {
-                // Only shown while the keyboard is up, which is exactly
-                // when it's needed.
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { draftFocused = false }
-                }
-            }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 0) {
                     attachmentPreview
@@ -315,6 +308,21 @@ struct ChatView: View {
                     .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1...3)
+                if draftFocused {
+                    // The way out of the keyboard. It sits in the bar
+                    // rather than on the keyboard's own toolbar,
+                    // because a ToolbarItemGroup(placement: .keyboard)
+                    // never appears for a field inside a
+                    // safeAreaInset -- checked in the Simulator, not
+                    // assumed. Shown only while the keyboard is up.
+                    Button {
+                        draftFocused = false
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .accessibilityLabel("Hide keyboard")
+                }
                 PhotosPicker(selection: $viewModel.photoPickerItem, matching: .images) {
                     Image(systemName: "photo.on.rectangle")
                         .foregroundStyle(Theme.textSecondary)

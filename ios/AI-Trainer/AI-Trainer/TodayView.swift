@@ -188,11 +188,8 @@ struct TodayView: View {
             .scrollContentBackground(.hidden)
             .navigationTitle("Today")
             .scrollDismissesKeyboard(.interactively)
+            .onTapGesture { draftFocused = false }
             .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { draftFocused = false }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingLogSession = true
@@ -550,6 +547,18 @@ struct TodayView: View {
                     .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1...3)
+                if draftFocused {
+                    // See ChatView: the keyboard's own toolbar doesn't
+                    // reach a field inside a safeAreaInset, so the way
+                    // out lives here.
+                    Button {
+                        draftFocused = false
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .accessibilityLabel("Hide keyboard")
+                }
                 PhotosPicker(selection: $viewModel.photoPickerItem, matching: .images) {
                     Image(systemName: "photo.on.rectangle")
                         .foregroundStyle(Theme.textSecondary)
