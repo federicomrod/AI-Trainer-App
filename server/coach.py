@@ -199,7 +199,7 @@ def run_turn(conn, message, image_base64=None):
     # answer for today and nothing else: nothing was saved, Week and
     # Progress stayed empty, and the same correction had to be repeated
     # tomorrow. See session_corrections.py.
-    applied_updates = {"applied": [], "rejected": []}
+    applied_updates = {"applied": [], "rejected": [], "unresolved": []}
     if message:
         applied_updates = session_corrections.update_sessions_from_message(
             conn, message, date.today().isoformat()
@@ -209,6 +209,14 @@ def run_turn(conn, message, image_base64=None):
     saved_updates = render.saved_updates_text(
         {"_applied_updates": applied_updates}
     )
+    # A day the extraction wasn't sure about was not written. The
+    # athlete is asked about it rather than having a guess saved under
+    # their name -- see session_corrections._confidence_problem().
+    confirmation_question = render.unresolved_question(applied_updates)
+    if confirmation_question:
+        saved_updates = "\n\n".join(
+            part for part in (saved_updates, confirmation_question) if part
+        )
 
     briefing_text = build_briefing(conn)
 
@@ -255,8 +263,18 @@ def run_turn(conn, message, image_base64=None):
     # confirmation later -- same internal-marker convention as
     # `_precheck_only`. render.saved_updates_text() turns it into the
     # "Updated Mon (Push), Tue (Swim)" line.
-    if applied_updates["applied"] or applied_updates["rejected"]:
+    if any(applied_updates.values()):
         decision["_applied_updates"] = applied_updates
+
+    # CLAUDE.md's `question` field is exactly this: the one thing whose
+    # answer changes what gets recorded. It goes first -- the planner's
+    # own question, if it had one, still follows.
+    if confirmation_question:
+        existing = (decision.get("question") or "").strip()
+        decision["question"] = (
+            f"{confirmation_question}\n\n{existing}" if existing
+            else confirmation_question
+        )
 
     _save_message(conn, "assistant", json.dumps(decision))
 

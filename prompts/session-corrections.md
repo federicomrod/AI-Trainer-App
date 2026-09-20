@@ -43,12 +43,52 @@ definite about. For each entry:
   view. Keep any number they mention (distance, time, load).
 - **duration_min** — minutes, if they said or clearly implied it.
   `null` otherwise. Never estimate a duration they didn't give.
+- **heard** — the athlete's own words about this day, quoted from the
+  message ("Tuesday was the pool"). Not your paraphrase: this is what
+  gets read back to them if the day needs confirming.
+- **confidence** — `high` only when the words can't reasonably mean a
+  different session type. `medium` or `low` otherwise. A day below
+  `high` is **not saved**; the athlete is asked about it instead, so
+  being unsure costs them one question and being wrong costs them a
+  false entry in their training history.
+- **alternative** — the other type it could be when confidence isn't
+  high, else `null`.
+
+### Most of this message arrived by voice
+
+Assume every message may be a transcription, and that transcription
+gets words wrong in ways that still read perfectly.
+
+The one that has already happened here: **"pull" comes back as "the
+pool"**. Both are real session types — `pull` is the gym day, `swim`
+is the pool — so a confident guess writes the wrong session into
+someone's history with nothing to show it was a guess.
+
+- "Tuesday was the pool" — ambiguous. `swim`, `alternative: pull`,
+  confidence `low`.
+- "Tuesday was pull" — equally ambiguous the other way. `pull`,
+  `alternative: swim`, confidence `low`.
+- "Tuesday the pool, 40 lengths" — settled. `swim`, confidence `high`.
+- "Tuesday pull, 3x10 lat pulldown" — settled. `pull`, `high`.
+- "Tuesday was pull, not the pool" — they drew the distinction
+  themselves. `pull`, `high`.
+
+The same care applies to anything else that could be two types: "ride"
+and "run" in a noisy recording, "press" meaning a push day or one
+exercise inside another session. Corroborating detail — distance,
+lengths, reps, a bike, a lane — is what makes a reading `high`.
+
+When an earlier message shows the coach asked which session a day was,
+and this message answers it ("it was pull", "the second one"), that
+answer *is* the confirmation: return that day with confidence `high`.
 
 Rules:
 
 - **Only days that have already happened, including today.** A future
   intention ("I'll ride Saturday") is planning, not a correction —
   leave it out entirely; the planner handles that.
+- **Never guess between two valid types.** Half a session type is not
+  a session type. Mark it and let the athlete settle it.
 - **Only definite statements.** "Tuesday was the pool" is definite.
   "I might have swum Tuesday", "usually I swim Tuesdays", or a
   question about Tuesday is not. When in doubt, leave it out: a wrong

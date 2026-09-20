@@ -72,6 +72,31 @@ def saved_updates_text(decision):
     return "\n".join(lines) or None
 
 
+def unresolved_question(updates):
+    """The question to put to the athlete about days that were read
+    but not written, or None when there are none.
+
+    Deliberately quotes their own words back: the whole reason a day
+    ends up here is that the transcript may not be what they said, so
+    "I heard 'the pool'" is the part that lets them spot it.
+    """
+    unresolved = (updates or {}).get("unresolved") or []
+    if not unresolved:
+        return None
+    lines = []
+    for entry in unresolved:
+        options = [o.capitalize() for o in entry.get("options") or []]
+        choice = " or ".join(options) if options else "which session it was"
+        heard = entry.get("heard")
+        quoted = f' I heard "{heard}" --' if heard else ""
+        lines.append(
+            f"{_day_label(entry.get('date'))}:{quoted} was that {choice}?"
+        )
+    lead = ("I haven't saved that day yet." if len(lines) == 1
+            else "I haven't saved those days yet.")
+    return "\n".join(lines) + " " + lead
+
+
 def render_reply(decision):
     """Return the plain-text coach reply for an already-validated
     decision (the safety pre-check path in cli.py never reaches this —
