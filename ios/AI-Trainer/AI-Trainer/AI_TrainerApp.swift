@@ -38,28 +38,30 @@ struct AI_TrainerApp: App {
     // the coach about a week it knows nothing about would produce
     // confident nonsense.
     @State private var isOnboarded: Bool?
+    /// Which tab is showing. Debug builds can start on a given one with
+    /// the launch argument `-startTab 2` (used to take screenshots).
+    @State private var selectedTab = UserDefaults.standard.integer(forKey: "startTab")
 
     init() {
         #if DEBUG
         VoiceSelfTest.runIfRequested()
         #endif
         #if os(iOS)
-        // Screen titles ("Today", "This Week", "Progress", "Coach")
-        // are UIKit nav-bar text, not SwiftUI Text -- this is the one
-        // way to actually restyle them. SF Rounded on both the large
-        // and standard title, matching Theme.rounded() everywhere else
-        // a "header" is drawn in SwiftUI directly.
-        let largeDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .largeTitle)
-            .withDesign(.rounded)?
-            .withSymbolicTraits(.traitBold) ?? UIFontDescriptor.preferredFontDescriptor(withTextStyle: .largeTitle)
-        let titleDescriptor = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .headline)
-            .withDesign(.rounded) ?? UIFontDescriptor.preferredFontDescriptor(withTextStyle: .headline)
-        UINavigationBar.appearance().largeTitleTextAttributes = [
-            .font: UIFont(descriptor: largeDescriptor, size: largeDescriptor.pointSize)
-        ]
-        UINavigationBar.appearance().titleTextAttributes = [
-            .font: UIFont(descriptor: titleDescriptor, size: titleDescriptor.pointSize)
-        ]
+        // Screen titles are UIKit nav-bar text, not SwiftUI Text -- this
+        // is the one way to restyle them: heavy SF Pro, tight tracking,
+        // on the near-black background (Theme.swift).
+        let large = UIFont.systemFont(ofSize: 34, weight: .heavy)
+        let small = UIFont.systemFont(ofSize: 17, weight: .bold)
+        let text = UIColor(Theme.textPrimary)
+        let nav = UINavigationBarAppearance()
+        nav.configureWithOpaqueBackground()
+        nav.backgroundColor = UIColor(Theme.background)
+        nav.shadowColor = .clear
+        nav.largeTitleTextAttributes = [.font: large, .foregroundColor: text, .kern: -0.8]
+        nav.titleTextAttributes = [.font: small, .foregroundColor: text]
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = nav
+        UINavigationBar.appearance().compactAppearance = nav
         #endif
     }
 
@@ -70,15 +72,19 @@ struct AI_TrainerApp: App {
                 case .open where isOnboarded == false:
                     OnboardingView { isOnboarded = true }
                 case .open:
-                    TabView {
+                    TabView(selection: $selectedTab) {
                         TodayView()
                             .tabItem { Label("Today", systemImage: "sun.max") }
+                            .tag(0)
                         WeekView()
                             .tabItem { Label("Week", systemImage: "calendar") }
+                            .tag(1)
                         ProgressChartView()
                             .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                            .tag(2)
                         ChatView()
                             .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right") }
+                            .tag(3)
                     }
                 case .unreachable:
                     ConnectionErrorView(
@@ -98,6 +104,7 @@ struct AI_TrainerApp: App {
             }
             .tint(Theme.accent)
             .preferredColorScheme(.dark)
+            .background(Theme.background.ignoresSafeArea())
         }
     }
 

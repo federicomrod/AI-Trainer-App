@@ -106,15 +106,15 @@ struct VoiceInputButton: View {
         case .idle:
             Image(systemName: "mic.fill")
                 .font(.system(size: 26, weight: .semibold))
-                .foregroundStyle(Theme.background)
+                .foregroundStyle(Theme.onAccent)
         case .starting, .finishing:
-            ProgressView().tint(Theme.background)
+            ProgressView().tint(Theme.onAccent)
         case .recording:
             // symbolEffect rather than a repeatForever animation: it
             // stops cleanly when recording does.
             Image(systemName: "waveform")
                 .font(.system(size: 26, weight: .semibold))
-                .foregroundStyle(Theme.background)
+                .foregroundStyle(Theme.onAccent)
                 .symbolEffect(.variableColor.iterative, isActive: true)
         }
     }

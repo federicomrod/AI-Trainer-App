@@ -364,7 +364,7 @@ struct TodayView: View {
             Button("Try again") {
                 Task { await viewModel.loadToday() }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.primary)
         }
         .padding(.top, 40)
     }
@@ -403,7 +403,7 @@ struct TodayView: View {
                 } label: {
                     HStack(alignment: .top, spacing: 8) {
                         Text(segment.text)
-                            .font(Theme.rounded(.title3, weight: .semibold))
+                            .font(Theme.font(.title3, weight: .semibold))
                             .foregroundStyle(Theme.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.leading)
@@ -487,9 +487,9 @@ struct TodayView: View {
             HStack {
                 Image(systemName: SessionTypeIcon.symbolName(for: session.type))
                     .font(.title3)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(SessionTypeIcon.tint(for: session.type))
                 Text(session.type.replacingOccurrences(of: "_", with: " ").capitalized)
-                    .font(Theme.rounded(.headline, weight: .bold))
+                    .font(Theme.font(.headline, weight: .bold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Text("\(session.durationMin) min")

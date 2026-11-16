@@ -259,7 +259,7 @@ struct ChatView: View {
                         .accessibilityLabel("Screenshot sent with this message")
                 }
                 Text(text)
-                    .foregroundStyle(isUser ? Theme.background : Theme.textPrimary)
+                    .foregroundStyle(isUser ? Theme.onAccent : Theme.textPrimary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)

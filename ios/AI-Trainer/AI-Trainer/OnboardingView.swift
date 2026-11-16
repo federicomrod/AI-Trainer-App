@@ -133,7 +133,7 @@ struct OnboardingView: View {
     private var goalsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Goals")
-                .font(Theme.rounded(.headline, weight: .bold))
+                .font(Theme.font(.headline, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
             Text("One per line, most important first.")
                 .font(.footnote)
@@ -154,7 +154,7 @@ struct OnboardingView: View {
     private var practicalSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Practicalities")
-                .font(Theme.rounded(.headline, weight: .bold))
+                .font(Theme.font(.headline, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
             field("Availability", "5-6 days/week, mornings", $viewModel.availability)
             sessionLengthStepper
@@ -194,7 +194,7 @@ struct OnboardingView: View {
                 .foregroundStyle(Theme.textSecondary)
             Stepper(value: $viewModel.sessionLength, in: 20...180, step: 5) {
                 Text("\(viewModel.sessionLength) min")
-                    .font(Theme.rounded(.body, weight: .semibold))
+                    .font(Theme.font(.body, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .monospacedDigit()
             }
@@ -235,7 +235,7 @@ struct OnboardingView: View {
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
             .background(selected ? Theme.accent : Theme.card, in: Capsule())
-            .foregroundStyle(selected ? Theme.background : Theme.textPrimary)
+            .foregroundStyle(selected ? Theme.onAccent : Theme.textPrimary)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -260,7 +260,7 @@ struct OnboardingView: View {
     private var routineSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Your usual week")
-                .font(Theme.rounded(.headline, weight: .bold))
+                .font(Theme.font(.headline, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
             Text("Optional. Only the rest of this week gets planned from it — past days stay empty until you log them.")
                 .font(.footnote)
@@ -309,10 +309,10 @@ struct OnboardingView: View {
             HStack {
                 Spacer()
                 if viewModel.isSaving {
-                    ProgressView().tint(Theme.background)
+                    ProgressView().tint(Theme.onAccent)
                 } else {
                     Text("Start training")
-                        .font(Theme.rounded(.headline, weight: .bold))
+                        .font(Theme.font(.headline, weight: .bold))
                 }
                 Spacer()
             }
@@ -321,7 +321,7 @@ struct OnboardingView: View {
                 viewModel.canSave ? Theme.accent : Theme.cardElevated,
                 in: RoundedRectangle(cornerRadius: Theme.controlRadius)
             )
-            .foregroundStyle(viewModel.canSave ? Theme.background : Theme.textSecondary)
+            .foregroundStyle(viewModel.canSave ? Theme.onAccent : Theme.textSecondary)
         }
         .buttonStyle(.plain)
         .disabled(!viewModel.canSave)

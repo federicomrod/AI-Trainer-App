@@ -73,7 +73,7 @@ struct WeekView: View {
                             .font(.callout)
                             .foregroundStyle(Theme.textSecondary)
                         Button("Try again") { Task { await viewModel.load() } }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.primary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
@@ -149,14 +149,14 @@ private struct DayCard: View {
             // glance without parsing the label.
             Image(systemName: SessionTypeIcon.symbolName(for: day.type))
                 .font(day.isToday ? .title2 : .body)
-                .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.accent)
+                .foregroundStyle(isQuiet ? Theme.textSecondary : SessionTypeIcon.tint(for: day.type))
                 .frame(width: day.isToday ? 30 : 24)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: isQuiet ? 4 : 6) {
                 HStack {
                     Text("\(day.weekday) · \(shortDate(day.date))")
-                        .font(Theme.rounded(isQuiet ? .footnote : .subheadline, weight: .semibold))
+                        .font(Theme.font(isQuiet ? .footnote : .subheadline, weight: .semibold))
                         .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
                     if day.isToday {
                         // Today is the hero of this list -- the one
@@ -193,10 +193,10 @@ private struct DayCard: View {
                         }
                     }
                     .padding(8)
-                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                 } else {
                     Text(displayType(day.type))
-                        .font(day.isToday ? Theme.rounded(.title3, weight: .bold) : .callout.weight(.medium))
+                        .font(day.isToday ? Theme.font(.title3, weight: .bold) : .callout.weight(.medium))
                         .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
                 }
 
