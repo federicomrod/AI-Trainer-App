@@ -29,8 +29,10 @@ add endurance without shrinking. Busy job, travel, social life,
 inconsistent weeks. Knows what a RDL is. Does not want to be taught how
 to train — wants help fitting it all together.
 
-Do not add features for beginners, weight-loss users, or racing
-athletes. Not yet.
+Do not add features for beginners, weight-loss users, or elite and
+professional racing athletes. Not yet. (Changed 2026-11-16: a gym-goer
+training for an event such as a Hyrox, a half Ironman or a marathon is
+the persona, not a racing athlete, so dated event goals are in scope.)
 
 ## The core loop
 

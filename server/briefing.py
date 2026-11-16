@@ -15,7 +15,9 @@ state (soreness/energy), tracked exercises, events, coach memory.
 """
 
 import json
+import re
 from datetime import date, timedelta
+from pathlib import Path
 
 from db import get_connection
 
@@ -348,6 +350,105 @@ def section_progress(conn, today):
     return "\n".join(lines)
 
 
+EVENTS_DIR = Path(__file__).parent.parent / "prompts" / "events"
+_ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+
+
+def event_phase(days_left):
+    """Where an athlete is in a build toward a race, from days to go.
+    Computed in code so the coach never does calendar arithmetic. Only
+    meaningful when the goal is an event; the coach decides whether a
+    given dated goal is one."""
+    if days_left < 0:
+        return "date has passed"
+    if days_left <= 7:
+        return "race week"
+    if days_left <= 14:
+        return "taper"
+    if days_left <= 28:
+        return "peak"
+    if days_left <= 84:
+        return "build"
+    return "base"
+
+
+def dated_goals(goals, today):
+    """[(goal_text, date, days_left)] for every goal that contains an
+    ISO date (2027-05-16). Goals stay plain strings, which is what the
+    app and the API already store; a date written into the text is what
+    makes a goal dated."""
+    found = []
+    for text in goals:
+        m = _ISO_DATE.search(text)
+        if not m:
+            continue
+        try:
+            when = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            continue
+        found.append((text, when, (when - today).days))
+    return found
+
+
+def event_files_for(goals):
+    """[(keywords, text)] for every prompts/events/*.md whose first-line
+    `keywords:` match any goal. Editable markdown, per CLAUDE.md: coach
+    knowledge lives in /prompts, not in code."""
+    if not EVENTS_DIR.exists():
+        return []
+    haystack = " ".join(goals).lower()
+    matched = []
+    for path in sorted(EVENTS_DIR.glob("*.md")):
+        text = path.read_text()
+        first = text.splitlines()[0] if text else ""
+        if not first.lower().startswith("keywords:"):
+            continue
+        words = [w.strip() for w in first.split(":", 1)[1].lower().split(",") if w.strip()]
+        if any(w in haystack for w in words):
+            matched.append((words, text))
+    return matched
+
+
+def section_dated_goals(conn, today):
+    row = conn.execute("SELECT goals_json FROM profile WHERE id = 1").fetchone()
+    goals = json.loads(row["goals_json"]) if row else []
+    lines = ["DATED GOALS (days and phase computed in code)"]
+    dated = dated_goals(goals, today)
+    if dated:
+        for text, when, days in dated:
+            if days < 0:
+                lines.append(f"- {text}: {abs(days)} days ago ({event_phase(days)}).")
+            else:
+                lines.append(
+                    f"- {text}: {days} days away ({days // 7} weeks, {days % 7} "
+                    f"days). Phase if this is a race: {event_phase(days)}. "
+                    f"Phases: base over 12 weeks out, build 5-12 weeks, peak "
+                    f"3-4 weeks, taper the 2 weeks before, race week the last 7 days."
+                )
+    else:
+        lines.append("(no goal has a date)")
+    # An event the athlete named but never dated: the coach has to ask.
+    for words, _ in event_files_for(goals):
+        for text in goals:
+            if any(w in text.lower() for w in words) and not _ISO_DATE.search(text):
+                lines.append(f"- {text}: event named but NO DATE on record. Ask "
+                             f"for the date once; plan nothing event-specific "
+                             f"until you have it.")
+    return "\n".join(lines)
+
+
+def section_event_knowledge(conn):
+    row = conn.execute("SELECT goals_json FROM profile WHERE id = 1").fetchone()
+    goals = json.loads(row["goals_json"]) if row else []
+    files = event_files_for(goals)
+    if not files:
+        return ""
+    parts = ["EVENT KNOWLEDGE (reference for the athlete's event goals; "
+             "UNVERIFIED items must be said as uncertain)"]
+    parts += [text.split("\n", 1)[1].strip() for _, text in files]
+    return "\n\n".join(parts)
+
+
 def section_this_week(conn, today):
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end = week_start + timedelta(days=6)              # Sunday
@@ -510,6 +611,7 @@ def build_briefing(conn, today=None):
         f"BRIEFING — {_fmt_date(today.isoformat())}",
         section_today(conn, today),
         section_profile(conn),
+        section_dated_goals(conn, today),
         section_last_14_days(conn, today),
         section_last_of_each_type(conn, today),
         section_progress(conn, today),
@@ -519,8 +621,9 @@ def build_briefing(conn, today=None):
         section_tracked_exercises(conn, today),
         section_events(conn, today),
         section_memory(conn),
+        section_event_knowledge(conn),
     ]
-    return "\n\n".join(sections)
+    return "\n\n".join(sec for sec in sections if sec)
 
 
 if __name__ == "__main__":

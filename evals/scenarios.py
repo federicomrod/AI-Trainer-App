@@ -607,3 +607,101 @@ SCENARIOS += [
         checks={"no debrief card": _no_debrief_for_a_question},
     ),
 ]
+
+
+# --- event goals -------------------------------------------------------
+# Dates are relative to the day the evals run, so the phase is stable.
+
+def _goal_in(days):
+    return (date.today() + timedelta(days=days)).isoformat()
+
+
+def _event_profile(days, event="Hyrox Zurich"):
+    profile = dict(FEDERICO_PROFILE)
+    profile["goals"] = [
+        f"{event} on {_goal_in(days)}, finish in the top 25% of my division",
+        "Aesthetic hypertrophy (lateral delts, upper chest, back)",
+    ]
+    return profile
+
+
+def _knows_the_event(result, conn, today):
+    text = _reply_text(result)
+    needed = ["run", "sled"]
+    missing = [w for w in needed if w not in text]
+    if missing:
+        return f"never mentions {missing}; got: {result.reply!r}"
+    return None
+
+
+def _names_the_phase(*words):
+    def check(result, conn, today):
+        text = _reply_text(result)
+        if not any(w in text for w in words):
+            return f"never mentions any of {list(words)}; got: {result.reply!r}"
+        return None
+    return check
+
+
+def _no_invented_percentile_time(result, conn, today):
+    import re
+    text = result.reply or ""
+    # A clock time such as 1:12 or 1:08:30 presented as the top-25% cut-off.
+    if re.search(r"top\s*25.{0,60}\b\d:\d{2}", text, re.IGNORECASE | re.DOTALL):
+        return ("states a specific top-25% time, which is UNVERIFIED in the "
+                f"event notes: {text!r}")
+    return None
+
+
+def _total_sets_at_most(limit):
+    def check(result, conn, today):
+        items = ((result.decision or {}).get("today") or {}).get("exercises") or []
+        total = sum(i.get("sets") or 0 for i in items)
+        if total > limit:
+            return f"{total} sets prescribed in a taper; expected {limit} or fewer"
+        return None
+    return check
+
+
+def _asks_for_the_date(result, conn, today):
+    if not (result.decision or {}).get("question"):
+        return "an event with no date on record, and the coach didn't ask for it"
+    return None
+
+
+SCENARIOS += [
+    Scenario(
+        name="event_plan_far_out",
+        about=("Hyrox in about 16 weeks. The coach has to explain what the "
+               "event asks, name the phase, and plan toward it, without "
+               "making up a percentile time."),
+        message="I want to do a Hyrox. How should I train for it?",
+        profile=_event_profile(112),
+        sessions=[(2, "push", "done", "Incline press, shoulder press")],
+        checks={
+            "knows the format": _knows_the_event,
+            "names the phase": _names_the_phase("base", "weeks"),
+            "no invented top-25% time": _no_invented_percentile_time,
+        },
+    ),
+    Scenario(
+        name="event_taper",
+        about=("Hyrox in 10 days is a taper: cut volume, nothing new, no "
+               "heavy legs. A normal 22-set session is wrong."),
+        message="Give me today's session.",
+        profile=_event_profile(10),
+        sessions=[(3, "legs", "done", "Smith squats, hack squat, Bulgarians")],
+        checks={
+            "calls it a taper": _names_the_phase("taper"),
+            "volume is cut": _total_sets_at_most(14),
+        },
+    ),
+    Scenario(
+        name="event_without_a_date",
+        about="A named event with no date on record: ask for the date once.",
+        message="Give me today's session.",
+        profile={**FEDERICO_PROFILE, "goals": ["Run a Hyrox", "Aesthetic hypertrophy"]},
+        sessions=[(3, "legs", "done", "Smith squats, hack squat")],
+        checks={"asks for the date": _asks_for_the_date},
+    ),
+]
