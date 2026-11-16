@@ -277,10 +277,12 @@ struct WorkoutView: View {
             await viewModel.loadLastWeights()
             #if DEBUG
             // Screenshots only: `-screenshotWorkout YES` also opens the
-            // first row and marks the second done.
+            // first row, logs one set on it (starting the rest timer) and
+            // marks the second done. Nothing is sent to the server.
             if UserDefaults.standard.bool(forKey: "screenshotWorkout"), viewModel.rows.count > 1 {
                 viewModel.mark(viewModel.rows[1].id, .done)
                 viewModel.toggleExpanded(viewModel.rows[0].id)
+                viewModel.logSet(viewModel.rows[0].id)
             }
             #endif
         }
