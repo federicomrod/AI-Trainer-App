@@ -72,6 +72,7 @@ struct ProgressChartView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 statsSection(progress.stats)
+                WeeklyShareSection(progress: progress)
                 weeklySessionsSection(progress.weeklySessions)
 
                 let sortedExercises = progress.lifts.keys.sorted()
