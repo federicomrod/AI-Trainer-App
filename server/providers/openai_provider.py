@@ -39,7 +39,11 @@ def _strict(schema):
 
     def walk(node):
         if isinstance(node, dict):
-            if node.get("type") == "object":
+            node_type = node.get("type")
+            # A nullable object is written ["object", "null"], not
+            # "object" -- strict mode wants the flag on both.
+            if node_type == "object" or (
+                    isinstance(node_type, list) and "object" in node_type):
                 node["additionalProperties"] = False
             for value in node.values():
                 walk(value)
