@@ -484,3 +484,62 @@ SCENARIOS += [
         },
     ),
 ]
+
+
+# --- the routine as data (feeds the swipeable rows in the app) -------
+
+def _routine_is_structured(min_items):
+    def check(result, conn, today):
+        items = ((result.decision or {}).get("today") or {}).get("exercises") or []
+        if len(items) < min_items:
+            return (f"only {len(items)} rows in today.exercises; the app "
+                    f"builds the workout from that list")
+        missing = [i.get("name") for i in items if not i.get("rest_sec")]
+        if len(missing) > len(items) // 2:
+            return f"most rows have no rest_sec: {missing}"
+        return None
+    return check
+
+
+def _has_superset(result, conn, today):
+    items = ((result.decision or {}).get("today") or {}).get("exercises") or []
+    groups = [i.get("superset_group") for i in items if i.get("superset_group")]
+    if len(groups) < 2:
+        return "the biceps superset has no shared superset_group"
+    return None
+
+
+def _interval_blocks(result, conn, today):
+    items = ((result.decision or {}).get("today") or {}).get("exercises") or []
+    if len(items) < 3:
+        return (f"{len(items)} rows; an interval session needs a warm-up, "
+                f"the work block and a cooldown")
+    if not any("w" in (i.get("target") or "").lower() for i in items):
+        return "no power target on any block"
+    return None
+
+
+SCENARIOS += [
+    Scenario(
+        name="routine_is_rows",
+        about=("The app turns today.exercises into swipeable rows, so a "
+               "pull session has to arrive as a real list with rests, "
+               "not only as text."),
+        message="Build me a pull session, 50 minutes.",
+        profile=FEDERICO_PROFILE,
+        sessions=[(3, "push", "done", "Incline press, shoulder press")],
+        checks={
+            "a full list of rows": _routine_is_structured(5),
+            "the curl superset is grouped": _has_superset,
+        },
+    ),
+    Scenario(
+        name="intervals_are_blocks",
+        about=("An interval ride is warm-up, work blocks and cooldown, "
+               "each a swipeable row, with the power target on the work."),
+        message="Give me the bike intervals: 4 x 4 minutes at 180 W.",
+        profile=FEDERICO_PROFILE,
+        sessions=[(2, "legs", "done", "Smith squats, curls, hack squat")],
+        checks={"warm-up, work, cooldown": _interval_blocks},
+    ),
+]

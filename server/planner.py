@@ -65,8 +65,21 @@ DECISION_SCHEMA = {
                             "sets": {"type": "integer"},
                             "reps": {"type": "string"},
                             "note": {"type": ["string", "null"]},
+                            # Added for the swipeable workout rows in the
+                            # app: one list item = one row on screen.
+                            "rest_sec": {"type": ["integer", "null"]},
+                            "technique": {"type": ["string", "null"]},
+                            "intensity": {
+                                "type": ["string", "null"],
+                                "enum": ["drop_set", "myo_reps", "rest_pause",
+                                         "back_off", "partials", None],
+                            },
+                            "superset_group": {"type": ["string", "null"]},
+                            "target": {"type": ["string", "null"]},
                         },
-                        "required": ["name", "sets", "reps", "note"],
+                        "required": ["name", "sets", "reps", "note",
+                                     "rest_sec", "technique", "intensity",
+                                     "superset_group", "target"],
                     },
                 },
                 "intensity_note": {"type": "string"},
