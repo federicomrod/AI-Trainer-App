@@ -543,3 +543,67 @@ SCENARIOS += [
         checks={"warm-up, work, cooldown": _interval_blocks},
     ),
 ]
+
+
+# --- the debrief ------------------------------------------------------
+
+def _debrief_uses_the_numbers(result, conn, today):
+    debrief = (result.decision or {}).get("debrief")
+    if not debrief:
+        return "no debrief came back for a session that was just logged"
+    lines = " ".join(debrief.get("vs_last") or [])
+    if "80" not in lines or "10" not in lines:
+        return (f"vs_last doesn't quote 80 kg and the +10 kg change from "
+                f"PROGRESS: {debrief.get('vs_last')}")
+    return None
+
+
+def _debrief_has_every_part(result, conn, today):
+    debrief = (result.decision or {}).get("debrief") or {}
+    if not (debrief.get("meaning") or "").strip():
+        return "debrief has no 'meaning'"
+    if not (debrief.get("next") or "").strip():
+        return "debrief has no 'next'"
+    return None
+
+
+def _no_generic_advice(result, conn, today):
+    debrief = (result.decision or {}).get("debrief") or {}
+    text = ((result.reply or "") + " " +
+            (debrief.get("fuel_or_rest") or "")).lower()
+    for phrase in ("eat more carbs", "rest more", "great job", "stronger than expected"):
+        if phrase in text:
+            return f"generic filler in the reply: {phrase!r}"
+    return None
+
+
+def _no_debrief_for_a_question(result, conn, today):
+    if (result.decision or {}).get("debrief"):
+        return "a plain question got a debrief card"
+    return None
+
+
+SCENARIOS += [
+    Scenario(
+        name="debrief_quotes_real_numbers",
+        about=("After a logged session the coach must compare with last "
+               "time using the numbers the code computed, not a feeling."),
+        message="Just finished pull. Neutral pulldown 80 kg for 3 sets of 8, then T-bar row.",
+        profile=FEDERICO_PROFILE,
+        sessions=[(2, "push", "done", "Incline press, shoulder press")],
+        lifts=[(0, "Neutral pulldown", 80.0, 8, 3), (8, "Neutral pulldown", 70.0, 8, 3)],
+        checks={
+            "quotes 80 kg and +10": _debrief_uses_the_numbers,
+            "meaning and next are filled": _debrief_has_every_part,
+            "no generic filler": _no_generic_advice,
+        },
+    ),
+    Scenario(
+        name="no_debrief_for_a_question",
+        about="A question about the plan is not a finished session.",
+        message="What's on for Thursday?",
+        profile=FEDERICO_PROFILE,
+        sessions=[(3, "pull", "done", "Pulldowns, T-bar row")],
+        checks={"no debrief card": _no_debrief_for_a_question},
+    ),
+]

@@ -248,6 +248,106 @@ def section_last_of_each_type(conn, today):
     return "\n".join(lines)
 
 
+def _kg(value):
+    return f"{int(value) if value == int(value) else value} kg"
+
+
+def _lift_label(row):
+    """"80 kg x 3 sets" / "80 kg x 8 reps" from a lifts row, whichever
+    parts exist."""
+    parts = []
+    if row["weight"] is not None:
+        parts.append(_kg(row["weight"]))
+    if row["sets"] is not None and row["reps"] is not None:
+        parts.append(f"{row['sets']} x {row['reps']}")
+    elif row["sets"] is not None:
+        parts.append(f"{row['sets']} sets")
+    elif row["reps"] is not None:
+        parts.append(f"x{row['reps']}")
+    return " ".join(parts) or "(no numbers)"
+
+
+def progress_for_exercise(rows):
+    """One line of arithmetic about one exercise, done in code so the
+    coach quotes changes instead of inventing them. `rows` are lifts
+    rows newest first, one per date. Returns None with fewer than one
+    row."""
+    if not rows:
+        return None
+    latest = rows[0]
+    line = f"{latest['exercise_name']}: {_lift_label(latest)} on {latest['date']}"
+    if len(rows) == 1:
+        return line + " (first number logged, nothing to compare yet)"
+    previous = rows[1]
+    line += f"; previous {_lift_label(previous)} on {previous['date']}"
+    if latest["weight"] is not None and previous["weight"] is not None:
+        change = round(latest["weight"] - previous["weight"], 2)
+        if change == 0:
+            line += " (same weight"
+        else:
+            line += f" ({'+' if change > 0 else ''}{_kg(change)}"
+        if latest["reps"] is not None and previous["reps"] is not None:
+            reps = latest["reps"] - previous["reps"]
+            if reps:
+                line += f", {'+' if reps > 0 else ''}{reps} reps"
+        line += ")"
+    first = rows[-1]
+    if len(rows) > 2 and latest["weight"] is not None and first["weight"] is not None:
+        total = round(latest["weight"] - first["weight"], 2)
+        line += (f". Since first logged ({first['date']}, {_kg(first['weight'])}): "
+                 f"{'+' if total >= 0 else ''}{_kg(total)}")
+    return line
+
+
+def section_progress(conn, today):
+    """Computed changes, so a debrief can say "up 5 kg" because it is
+    true. Covers tracked lifts (latest vs previous vs first) and how
+    much training actually happened in each of the last four weeks."""
+    iso = today.isoformat()
+    names = conn.execute(
+        "SELECT exercise_name, MAX(date) AS last_date FROM lifts "
+        "WHERE date <= ? GROUP BY exercise_name ORDER BY last_date DESC",
+        (iso,),
+    ).fetchall()
+
+    lines = ["PROGRESS (computed in code from logged numbers; quote these, "
+             "never invent a change that is not listed)"]
+    if not names:
+        lines.append("(no lifts logged with numbers, so there are no "
+                     "changes to quote)")
+    for n in names:
+        rows = conn.execute(
+            "SELECT * FROM lifts WHERE exercise_name = ? AND date <= ? "
+            "ORDER BY date DESC, id DESC", (n["exercise_name"], iso),
+        ).fetchall()
+        per_date, seen = [], set()
+        for r in rows:
+            if r["date"] not in seen:
+                seen.add(r["date"])
+                per_date.append(r)
+        text = progress_for_exercise(per_date)
+        if text:
+            lines.append(f"- {text}")
+
+    lines.append("Training load by week (completed sessions only):")
+    week_start = today - timedelta(days=today.weekday())
+    for back in range(4, -1, -1):
+        start = week_start - timedelta(days=7 * back)
+        end = start + timedelta(days=6)
+        rows = conn.execute(
+            "SELECT type, duration_min FROM sessions WHERE date >= ? AND date <= ? "
+            "AND date <= ? AND status IN ('done','partial','unplanned') "
+            "AND type != 'rest'", (start.isoformat(), end.isoformat(), iso),
+        ).fetchall()
+        lifts = sum(1 for r in rows if r["type"] in LIFTING_TYPES)
+        minutes = sum(r["duration_min"] or 0 for r in rows)
+        label = "this week so far" if back == 0 else f"week of {start.isoformat()}"
+        lines.append(f"  {label}: {len(rows)} sessions ({lifts} lifting, "
+                     f"{len(rows) - lifts} other), {minutes} min where durations "
+                     f"were logged")
+    return "\n".join(lines)
+
+
 def section_this_week(conn, today):
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end = week_start + timedelta(days=6)              # Sunday
@@ -412,6 +512,7 @@ def build_briefing(conn, today=None):
         section_profile(conn),
         section_last_14_days(conn, today),
         section_last_of_each_type(conn, today),
+        section_progress(conn, today),
         section_this_week(conn, today),
         section_recent_decisions(conn, today),
         section_current_state(conn, today),

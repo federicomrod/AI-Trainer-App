@@ -88,6 +88,18 @@ DECISION_SCHEMA = {
         },
         "why": {"type": "string"},
         "reply": {"type": ["string", "null"]},
+        # The post-session debrief, for the app's debrief card. null
+        # unless the athlete just logged or described a finished session.
+        "debrief": {
+            "type": ["object", "null"],
+            "properties": {
+                "vs_last": {"type": "array", "items": {"type": "string"}},
+                "meaning": {"type": "string"},
+                "next": {"type": "string"},
+                "fuel_or_rest": {"type": ["string", "null"]},
+            },
+            "required": ["vs_last", "meaning", "next", "fuel_or_rest"],
+        },
         "reasons": {
             "type": "array",
             "items": {
@@ -138,7 +150,7 @@ DECISION_SCHEMA = {
         "safety_flag": {"type": ["string", "null"]},
     },
     "required": [
-        "decision", "today", "why", "reply", "reasons", "plan_diff",
+        "decision", "today", "why", "reply", "debrief", "reasons", "plan_diff",
         "specialist_notes", "memory_to_add", "question", "safety_flag",
     ],
 }
