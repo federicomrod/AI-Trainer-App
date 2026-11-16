@@ -35,6 +35,29 @@ A progress bar per goal with checkpoints (Revolut/Duolingo feel, no
 streaks). Earned milestone badges only. A shareable weekly card for
 Instagram Stories. See CLAUDE.md, "Goals, progress and sharing".
 
+## The product is the loop around the workout
+
+Decided 2026-11-16. The app is mostly used before and after training,
+not during it. The value is: log it (voice, screenshot, text, or a swipe
+in the gym), get a coach debrief, see progress. Strava and Garmin
+Connect record; they do not coach, and they do not remember last week.
+
+- **Cardio is after the fact.** The watch records; the app takes the
+  Garmin or Strava screenshot (or HealthKit), shows the numbers in the
+  modern card, and the coach comments. No live cardio screen in v1: the
+  watch is already doing that job, and a second app must not compete
+  with trainer control.
+- **Gym is the one live exception**, because swiping an exercise done
+  and nudging the weight is faster than typing, and it is where the
+  precise numbers come from.
+- **The debrief is the hero.** After every logged session the coach
+  says: how it compared with last time, in numbers; what it means for
+  the next days; the one plan change if there is one; fuel or rest only
+  when it matters. No "stronger than expected" without a number, no
+  generic advice (more carbs, rest more), no praise for logging.
+- Progress views (goal bars, "+7.5 kg", gauge, line) are built from the
+  same logged numbers, so the debrief and the weekly card never disagree.
+
 ## Later
 
 Running logged after the fact. Tribes and group scheduling (v2).
