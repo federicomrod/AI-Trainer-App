@@ -38,9 +38,6 @@ struct AI_TrainerApp: App {
     // the coach about a week it knows nothing about would produce
     // confident nonsense.
     @State private var isOnboarded: Bool?
-    /// Which tab is showing. Debug builds can start on a given one with
-    /// the launch argument `-startTab 2` (used to take screenshots).
-    @State private var selectedTab = UserDefaults.standard.integer(forKey: "startTab")
 
     init() {
         #if DEBUG
@@ -72,20 +69,7 @@ struct AI_TrainerApp: App {
                 case .open where isOnboarded == false:
                     OnboardingView { isOnboarded = true }
                 case .open:
-                    TabView(selection: $selectedTab) {
-                        TodayView()
-                            .tabItem { Label("Today", systemImage: "sun.max") }
-                            .tag(0)
-                        WeekView()
-                            .tabItem { Label("Week", systemImage: "calendar") }
-                            .tag(1)
-                        ProgressChartView()
-                            .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
-                            .tag(2)
-                        ChatView()
-                            .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right") }
-                            .tag(3)
-                    }
+                    MainTabView()
                 case .unreachable:
                     ConnectionErrorView(
                         host: Config.backendURL.host ?? Config.backendURL.absoluteString,
