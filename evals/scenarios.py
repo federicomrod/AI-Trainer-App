@@ -367,10 +367,16 @@ def _assistant_turn(reply):
 
 
 def _reply_text(result):
-    return ((result.reply or "") + " " +
+    text = ((result.reply or "") + " " +
             " ".join(e.get("name", "") for e in
                      ((result.decision or {}).get("today") or {}).get("exercises", []))
             ).lower()
+    # The model often writes typographic hyphens ("T-bar" with a
+    # non-breaking hyphen). Same word to a person, different characters
+    # to a string match, so fold them to a plain hyphen first.
+    for dash in "\u2010\u2011\u2012\u2013\u2014\u2212":
+        text = text.replace(dash, "-")
+    return text
 
 
 def _mentions(*words):
