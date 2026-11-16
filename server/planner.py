@@ -74,6 +74,7 @@ DECISION_SCHEMA = {
             "required": ["type", "duration_min", "exercises", "intensity_note"],
         },
         "why": {"type": "string"},
+        "reply": {"type": ["string", "null"]},
         "reasons": {
             "type": "array",
             "items": {
@@ -124,8 +125,8 @@ DECISION_SCHEMA = {
         "safety_flag": {"type": ["string", "null"]},
     },
     "required": [
-        "decision", "today", "why", "reasons", "plan_diff", "specialist_notes",
-        "memory_to_add", "question", "safety_flag",
+        "decision", "today", "why", "reply", "reasons", "plan_diff",
+        "specialist_notes", "memory_to_add", "question", "safety_flag",
     ],
 }
 
@@ -175,7 +176,7 @@ def active_provider():
     return provider
 
 
-def get_decision(briefing_text, message_text, image_base64=None):
+def get_decision(briefing_text, message_text, image_base64=None, history=None):
     """Make the one model call, through whichever provider is
     configured. `image_base64` is a screenshot the athlete attached
     (CLAUDE.md: "send the image to the model directly" -- no separate
@@ -191,5 +192,5 @@ def get_decision(briefing_text, message_text, image_base64=None):
 
     return provider.get_structured(
         _load_system_prompt(), user_content, DECISION_SCHEMA,
-        image_base64=image_base64,
+        image_base64=image_base64, history=history,
     )

@@ -23,6 +23,12 @@ from openai import OpenAI
 from . import PlannerError
 
 DEFAULT_MODEL = "gpt-5"
+# "low" made the coach noticeably shallower than a normal chat. Medium
+# is the default now; set OPENAI_REASONING_EFFORT=low|medium|high in
+# server/.env to compare. Reasoning tokens come out of the same cap as
+# the answer, hence the larger budget.
+DEFAULT_REASONING_EFFORT = "medium"
+MAX_COMPLETION_TOKENS = 8000
 
 
 def _strict(schema):
@@ -45,7 +51,8 @@ def _strict(schema):
     return schema
 
 
-def get_structured(system_prompt, user_content, schema, image_base64=None):
+def get_structured(system_prompt, user_content, schema, image_base64=None,
+                   history=None):
     model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     try:
         client = OpenAI()  # reads OPENAI_API_KEY
@@ -74,6 +81,10 @@ def get_structured(system_prompt, user_content, schema, image_base64=None):
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
+                # Earlier turns of the conversation, oldest first, so the
+                # coach can answer "what did you mean by that?" -- see
+                # coach.recent_history().
+                *(history or []),
                 {"role": "user", "content": message_content},
             ],
             response_format={
@@ -93,8 +104,9 @@ def get_structured(system_prompt, user_content, schema, image_base64=None):
             # decision, not open-ended problem solving) and the larger
             # cap leaves room for a full decision even when effort runs
             # a bit long.
-            reasoning_effort="low",
-            max_completion_tokens=4000,
+            reasoning_effort=os.environ.get("OPENAI_REASONING_EFFORT",
+                                            DEFAULT_REASONING_EFFORT),
+            max_completion_tokens=MAX_COMPLETION_TOKENS,
         )
     except openai.OpenAIError as e:
         raise PlannerError(f"OpenAI call failed: {e}") from e

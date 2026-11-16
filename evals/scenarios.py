@@ -327,3 +327,154 @@ SCENARIOS += [
         },
     ),
 ]
+
+
+# --- the conversation scenarios -------------------------------------
+# Written from Federico's own coaching history (2026-11-16): the things
+# the ChatGPT chat did that this app did not. Checks are still about
+# behaviour -- what the reply contains, whether the plan was touched --
+# never exact wording.
+
+FEDERICO_PROFILE = {
+    "goals": ["Aesthetic hypertrophy (lateral delts, upper chest, triceps, back)",
+              "Cycling FTP and VO2max"],
+    "weekly_availability": "5-6 sessions a week, mornings",
+    "typical_session_length_min": 50,
+    "equipment": "Commercial gym with Smith machine, Hammer Strength, hack squat",
+    "preferred_exercises": ["Bulgarian split squats", "chest-supported T-bar row"],
+    "disliked_exercises": ["traditional seated cable row"],
+    "injuries": ("Low-back pain from a seated cable row on 2026-10-12. Prefer "
+                 "chest-supported rows; avoid heavy unsupported hinging."),
+    "experience_level": "Advanced, 10+ years lifting",
+}
+
+
+def _assistant_turn(reply):
+    """A previous coach turn as coach.py saves it: the decision JSON."""
+    return json.dumps({
+        "decision": "KEEP",
+        "today": {"type": "legs", "duration_min": 50, "exercises": [],
+                  "intensity_note": ""},
+        "why": "Legs today.",
+        "reply": reply,
+        "reasons": [],
+        "plan_diff": [],
+        "specialist_notes": [],
+        "memory_to_add": [],
+        "question": None,
+        "safety_flag": None,
+    })
+
+
+def _reply_text(result):
+    return ((result.reply or "") + " " +
+            " ".join(e.get("name", "") for e in
+                     ((result.decision or {}).get("today") or {}).get("exercises", []))
+            ).lower()
+
+
+def _mentions(*words):
+    def check(result, conn, today):
+        text = _reply_text(result)
+        missing = [w for w in words if w.lower() not in text]
+        if missing:
+            return f"reply never mentions {missing}; got: {result.reply!r}"
+        return None
+    return check
+
+
+def _plan_untouched(result, conn, today):
+    decision = result.decision or {}
+    if decision.get("plan_diff"):
+        return f"a question changed the plan: {decision['plan_diff']}"
+    if decision.get("decision") != "KEEP":
+        return (f"decision is {decision.get('decision')!r}; just answering "
+                f"a question should be KEEP")
+    return None
+
+
+def _excludes(*words):
+    def check(result, conn, today):
+        exercises = ((result.decision or {}).get("today") or {}).get("exercises", [])
+        names = " | ".join(e.get("name", "") for e in exercises).lower()
+        hit = [w for w in words if w.lower() in names]
+        if hit:
+            return f"prescribed {hit} in {names!r}"
+        return None
+    return check
+
+
+def _answers_at_length(minimum_chars):
+    def check(result, conn, today):
+        n = len((result.reply or "").strip())
+        if n < minimum_chars:
+            return (f"reply is {n} characters; a requested routine needs "
+                    f"the whole session")
+        return None
+    return check
+
+
+SCENARIOS += [
+    Scenario(
+        name="recalls_last_pull_day",
+        about=("ChatGPT remembered what he did last pull day and answered "
+               "specifically. The coach has to name the exercises, not a "
+               "date."),
+        message="What did I do on my last pull day?",
+        profile=FEDERICO_PROFILE,
+        sessions=[(3, "pull", "done",
+                   "Neutral pulldown 4 sets, supinated pulldown 3 sets, "
+                   "chest-supported T-bar row 3 sets with a double drop, "
+                   "reverse cable fly 5x15, EZ curl and hammer curl "
+                   "superset, incline DB curls."),
+                  (6, "push", "done", "Incline press, shoulder press, lateral raises")],
+        checks={
+            "names the real exercises": _mentions("pulldown", "t-bar"),
+            "the plan is not touched": _plan_untouched,
+        },
+    ),
+    Scenario(
+        name="follows_the_thread",
+        about=("'Swap that for belt squat' only makes sense with the "
+               "routine in the previous message. No memory of the chat, "
+               "no answer."),
+        message="Swap the hack squat for belt squat, same sets.",
+        profile=FEDERICO_PROFILE,
+        messages=[
+            ("user", "Give me legs for today"),
+            ("assistant", _assistant_turn(
+                "Legs, about 50 minutes: Smith squat 4 x 6-8, seated leg "
+                "curl 4 x 8-12, hack squat 4 x 8-10, Bulgarian split squat "
+                "3 x 8-10 per leg, hip thrust 3 x 8-12, leg extension "
+                "3 x 12-15.")),
+        ],
+        checks={
+            "belt squat is in": _mentions("belt squat"),
+            "nothing is asked again": _does_not_ask,
+        },
+    ),
+    Scenario(
+        name="keeps_the_favourites",
+        about=("He asked never to lose Bulgarian split squats without "
+               "talking about it first."),
+        message="Give me today's legs, 50 minutes.",
+        profile=FEDERICO_PROFILE,
+        sessions=[(5, "legs", "done", "Smith squats, curls, Bulgarians, hip thrusts")],
+        checks={
+            "Bulgarians are in": _mentions("bulgarian"),
+            "the whole session is given": _answers_at_length(300),
+        },
+    ),
+    Scenario(
+        name="protects_the_back",
+        about=("Back pain on a seated cable row. A pull session must not "
+               "bring that exact movement back."),
+        message="Build me a pull session for tomorrow.",
+        profile=FEDERICO_PROFILE,
+        sessions=[(3, "push", "done", "Incline press, shoulder press")],
+        checks={
+            "no seated cable row": _excludes("seated cable row", "seated row"),
+            "the whole session is given": _answers_at_length(300),
+        },
+    ),
+]

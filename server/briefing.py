@@ -193,6 +193,61 @@ def section_last_14_days(conn, today):
     return "\n".join(lines)
 
 
+LIFTING_TYPES = ("push", "pull", "legs")
+DONE_STATUSES = ("done", "partial", "unplanned")
+DETAIL_TYPES = ("push", "pull", "legs", "ride", "intervals", "run", "swim")
+
+
+def section_last_of_each_type(conn, today):
+    """The most recent session of each type, in full, however long ago.
+
+    LAST 14 DAYS shows what happened recently but a rolling Push / Pull
+    / Legs athlete asks "what did I do last pull day?" and expects the
+    exercises, not a date. Also states the one fact a rolling split
+    runs on -- which lifting day was completed last -- and leaves what
+    comes next to the coach: it knows the athlete's own rules.
+    """
+    until = (today - timedelta(days=1)).isoformat()
+    lines = ["LAST SESSION OF EACH TYPE (full detail, completed sessions "
+             "only; use to keep progression recognisable)"]
+    found = False
+    last_lifting = None
+    for kind in DETAIL_TYPES:
+        row = conn.execute(
+            "SELECT * FROM sessions WHERE type = ? AND date <= ? AND status IN "
+            "('done', 'partial', 'unplanned') ORDER BY date DESC LIMIT 1",
+            (kind, until),
+        ).fetchone()
+        if row is None:
+            continue
+        found = True
+        if kind in LIFTING_TYPES and (last_lifting is None
+                                      or row["date"] > last_lifting["date"]):
+            last_lifting = row
+        extras = []
+        if row["duration_min"]:
+            extras.append(f"{row['duration_min']} min")
+        if row["rpe"]:
+            extras.append(f"RPE {row['rpe']}")
+        suffix = f"  [{', '.join(extras)}]" if extras else ""
+        lines.append(f"{kind} — {_fmt_date(row['date'])} ({row['status']}): "
+                     f"{row['actual_summary'] or '(no detail given)'}{suffix}")
+        if row["notes"]:
+            lines.append(f"  note: {row['notes']}")
+        lifts = conn.execute(
+            "SELECT exercise_name, weight, reps, sets, note FROM lifts "
+            "WHERE date = ? ORDER BY id", (row["date"],)
+        ).fetchall()
+        for lift in lifts:
+            lines.append(f"  logged: {_fmt_lift(lift)}")
+    if not found:
+        lines.append("(no completed sessions on record)")
+    if last_lifting is not None:
+        lines.append(f"Last completed lifting day: {last_lifting['type']} on "
+                     f"{_fmt_date(last_lifting['date'])}.")
+    return "\n".join(lines)
+
+
 def section_this_week(conn, today):
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end = week_start + timedelta(days=6)              # Sunday
@@ -356,6 +411,7 @@ def build_briefing(conn, today=None):
         section_today(conn, today),
         section_profile(conn),
         section_last_14_days(conn, today),
+        section_last_of_each_type(conn, today),
         section_this_week(conn, today),
         section_recent_decisions(conn, today),
         section_current_state(conn, today),

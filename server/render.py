@@ -107,6 +107,16 @@ def unresolved_question(updates):
     return "\n".join(lines) + " " + lead
 
 
+def chat_text(decision):
+    """What the Head Coach says in chat. `reply` is the conversational
+    answer (any length, any content -- a recalled session, a full
+    routine, a straight answer to a question). `why` is the short
+    reason behind today's call, shown on the Today card. Decisions
+    saved before `reply` existed only have `why`, so fall back to it."""
+    reply = (decision.get("reply") or "").strip()
+    return reply or (decision.get("why") or "").strip()
+
+
 def render_reply(decision):
     """Return the plain-text coach reply for an already-validated
     decision (the safety pre-check path in cli.py never reaches this —
@@ -123,7 +133,7 @@ def render_reply(decision):
     saved = saved_updates_text(decision)
     if saved:
         lines.append(saved + "\n")
-    lines.append(decision.get("why", "").strip())
+    lines.append(chat_text(decision))
 
     notes = decision.get("specialist_notes") or []
     if len(notes) > MAX_SPECIALISTS:
@@ -163,7 +173,7 @@ def render_segments(decision):
         segments.append({"speaker": LOG, "text": saved})
 
     # Only `why` -- no plan_diff lines. See render_reply().
-    head_text = decision.get("why", "").strip()
+    head_text = chat_text(decision)
     if head_text:
         segments.append({"speaker": HEAD_COACH, "text": head_text})
 

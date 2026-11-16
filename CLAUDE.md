@@ -24,7 +24,7 @@ The one-sentence contract:
 
 ## Who it is for (v1)
 
-One persona only. A trained gym-goer, 28–45, lifts 3–4x/week, wants to
+One persona only. A trained gym-goer, 28–45, lifts 3–5x/week, wants to
 add endurance without shrinking. Busy job, travel, social life,
 inconsistent weeks. Knows what a RDL is. Does not want to be taught how
 to train — wants help fitting it all together.
@@ -156,7 +156,29 @@ Never make the athlete feel behind for not logging in detail.
 No calorie tracking or weight-loss programming. No social feed. No
 exercise video library. No multi-agent debate. No readiness score
 presented as physiological fact. No Android. No Strava (their API terms
-prohibit AI use — do not integrate). No gamification. No streaks.
+prohibit AI use — do not integrate). No streaks. No arbitrary points
+or XP. No in-app social feed. (Changed 2026-11-16: goal progress bars,
+earned milestone badges and shareable report cards are allowed, see
+below. Tribes and group scheduling are v2.)
+
+## Goals, progress and sharing
+
+Added 2026-11-16, decided with the project owner.
+
+- A goal is a number with a baseline, a target and a date ("100 kg for
+  8 on bench", "2 minute dead hang", "VO2max 50"). It lives in
+  `profile.goals_json`; progress is computed from `lifts` and
+  `sessions`. No new table.
+- The coach says honestly whether a goal is on track, and what the
+  smallest change is when it isn't. Retests are scheduled, so progress
+  is measured and not just felt.
+- Progress is shown as a visual bar per goal, with checkpoints.
+- Milestone badges exist only for things that really happened (a first
+  rep-max, an FTP step, a retest passed). They are rare, never for
+  opening the app or logging.
+- A weekly report card can be shared to Instagram Stories in one tap.
+  No in-app feed.
+- Streaks stay banned: a missed day must never be punished.
 
 ## Tech decisions
 

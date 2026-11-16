@@ -3,7 +3,8 @@ providers/ — one small module per model provider. Each exposes exactly
 one function:
 
     get_structured(system_prompt: str, user_content: str, schema: dict,
-                    image_base64: str | None = None) -> dict
+                    image_base64: str | None = None,
+                    history: list[dict] | None = None) -> dict
 
 which makes one structured-output model call -- forcing the response
 into the shape of `schema` -- and returns it as a plain dict, raising

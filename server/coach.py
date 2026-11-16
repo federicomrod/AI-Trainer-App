@@ -248,6 +248,51 @@ def _same_call(a, b):
     )
 
 
+# How many earlier chat messages the coach sees. Enough to follow a
+# thread ("what about the second one?") without paying to re-read the
+# whole history on every turn -- older facts reach the coach through
+# the briefing and memory instead.
+HISTORY_MESSAGES = 16
+
+
+def recent_history(conn, limit=HISTORY_MESSAGES):
+    """The last few chat messages as model turns, oldest first.
+
+    Called after the athlete's new message has been saved, so that
+    newest row is dropped here: it goes to the model separately, inside
+    the briefing prompt. Assistant rows hold a decision dict as JSON,
+    so each is turned back into the words the athlete actually saw.
+    Consecutive rows from the same role are merged, because the model
+    APIs expect user and assistant turns to alternate.
+    """
+    rows = conn.execute(
+        "SELECT role, content FROM messages ORDER BY id DESC LIMIT ?",
+        (limit + 1,),
+    ).fetchall()
+    rows = list(reversed(rows))
+    if rows and rows[-1]["role"] == "user":
+        rows = rows[:-1]
+
+    turns = []
+    for row in rows:
+        content = row["content"]
+        if row["role"] == "assistant":
+            try:
+                content = reply_text_for(json.loads(content))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not (content or "").strip():
+            continue
+        if turns and turns[-1]["role"] == row["role"]:
+            turns[-1]["content"] += "\n\n" + content
+        else:
+            turns.append({"role": row["role"], "content": content})
+    # The first turn must come from the user.
+    while turns and turns[0]["role"] != "user":
+        turns.pop(0)
+    return turns
+
+
 def run_turn(conn, message, image_base64=None):
     """Run one full turn of the core loop for `message` (may be empty
     -- "just tell me today") and an optional screenshot
@@ -318,7 +363,10 @@ def run_turn(conn, message, image_base64=None):
 
     # --- The one model call. ---
     try:
-        decision = planner.get_decision(briefing_text, message, image_base64=image_base64)
+        decision = planner.get_decision(
+            briefing_text, message, image_base64=image_base64,
+            history=recent_history(conn),
+        )
     except planner.PlannerError as e:
         return TurnResult(
             briefing=briefing_text, decision=None, reply=None,
