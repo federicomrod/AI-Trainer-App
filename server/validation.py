@@ -73,18 +73,37 @@ _MINUTE_PATTERNS = [
 ]
 
 
+# A duration that describes the *workout*, not the athlete's time:
+# "4 x 4 minutes at 180 W", "intervals of 4 min", "2 min rest between".
+# Before this, asking for 4 x 4 minute intervals was read as "I only
+# have 4 minutes" and a correct 50-minute session was rejected.
+_BEFORE_STRUCTURE = re.compile(
+    r"(?:\d\s*[x\u00d7]\s*|\b(?:of|every|each)\s+)$", re.IGNORECASE)
+_AFTER_STRUCTURE = re.compile(
+    r"^\s*(?:(?:at|@)\s*\d|each\b|per\b|rest\b|recovery\b|intervals?\b"
+    r"|reps?\b|rounds?\b|/)", re.IGNORECASE)
+
+
+def _describes_the_workout(text, match):
+    before = text[:match.start()]
+    after = text[match.end():]
+    return bool(_BEFORE_STRUCTURE.search(before)
+                or _AFTER_STRUCTURE.search(after))
+
+
 def extract_stated_minutes(text):
     """Look for an explicit statement of available time in the
     message, e.g. "only have 40 minutes". Returns None if nothing is
     found. Simple pattern matching, not language understanding -- it
     will miss unusual phrasing, and that's an accepted limitation for
-    M0."""
+    M0. Durations that describe the workout itself ("4 x 4 minutes at
+    180 W") are not time the athlete has, and are skipped."""
     if not text:
         return None
     for pattern, extract in _MINUTE_PATTERNS:
-        m = pattern.search(text)
-        if m:
-            return extract(m)
+        for m in pattern.finditer(text):
+            if not _describes_the_workout(text, m):
+                return extract(m)
     return None
 
 
