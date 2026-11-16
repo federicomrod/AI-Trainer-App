@@ -10,13 +10,37 @@
 
 import Foundation
 
-/// One exercise prescription within today's session.
+/// One exercise prescription within today's session -- one row on the
+/// workout screen. Cardio blocks (warm-up, each interval, cooldown) are
+/// rows too.
+///
+/// The fields after `note` were added for the workout screen. All are
+/// optional so decisions saved before they existed still decode.
 struct Exercise: Codable, Identifiable {
     var id: String { name }
     let name: String
     let sets: Int
     let reps: String
     let note: String?
+    /// Rest after each set, in seconds. Starts the rest countdown.
+    let restSec: Int?
+    /// One short line on how to do it.
+    let technique: String?
+    /// drop_set, myo_reps, rest_pause, back_off, partials, or nil.
+    let intensity: String?
+    /// Exercises sharing a label ("A") are done back to back.
+    let supersetGroup: String?
+    /// A number to aim at from the athlete's own history or a power
+    /// target ("80 kg last time", "180 W").
+    let target: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, sets, reps, note
+        case restSec = "rest_sec"
+        case technique, intensity
+        case supersetGroup = "superset_group"
+        case target
+    }
 }
 
 /// Today's prescribed session, part of a Decision.
