@@ -123,7 +123,7 @@ struct DayDetailView: View {
                         .font(.title2)
                         .foregroundStyle(Theme.accent)
                     Text(type.replacingOccurrences(of: "_", with: " ").capitalized)
-                        .font(Theme.rounded(.title3, weight: .bold))
+                        .font(Theme.font(.title3, weight: .bold))
                         .foregroundStyle(Theme.textPrimary)
                 }
                 Spacer()
@@ -177,7 +177,7 @@ struct DayDetailView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon)
-                .font(Theme.rounded(.subheadline, weight: .semibold))
+                .font(Theme.font(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.textSecondary)
             content()
         }

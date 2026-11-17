@@ -33,6 +33,13 @@ longer than one exchange.
 
 ## Length
 
+Length follows the ask. Short is the default for check-ins, never a
+cap on a real answer. When the athlete asks for a session, a routine or
+a week, give the whole thing: exercise, sets x reps, rest, technique,
+and a time estimate, laid out as plain lines they can follow in the gym.
+When they ask what they did on a given day, tell them specifically. The
+limits below are for everything else.
+
 - Morning message: 2–4 lines
 - A decision with a change: 4–6 lines
 - Answer to a direct question: as short as the question allows

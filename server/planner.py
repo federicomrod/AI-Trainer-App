@@ -65,8 +65,21 @@ DECISION_SCHEMA = {
                             "sets": {"type": "integer"},
                             "reps": {"type": "string"},
                             "note": {"type": ["string", "null"]},
+                            # Added for the swipeable workout rows in the
+                            # app: one list item = one row on screen.
+                            "rest_sec": {"type": ["integer", "null"]},
+                            "technique": {"type": ["string", "null"]},
+                            "intensity": {
+                                "type": ["string", "null"],
+                                "enum": ["drop_set", "myo_reps", "rest_pause",
+                                         "back_off", "partials", None],
+                            },
+                            "superset_group": {"type": ["string", "null"]},
+                            "target": {"type": ["string", "null"]},
                         },
-                        "required": ["name", "sets", "reps", "note"],
+                        "required": ["name", "sets", "reps", "note",
+                                     "rest_sec", "technique", "intensity",
+                                     "superset_group", "target"],
                     },
                 },
                 "intensity_note": {"type": "string"},
@@ -74,6 +87,19 @@ DECISION_SCHEMA = {
             "required": ["type", "duration_min", "exercises", "intensity_note"],
         },
         "why": {"type": "string"},
+        "reply": {"type": ["string", "null"]},
+        # The post-session debrief, for the app's debrief card. null
+        # unless the athlete just logged or described a finished session.
+        "debrief": {
+            "type": ["object", "null"],
+            "properties": {
+                "vs_last": {"type": "array", "items": {"type": "string"}},
+                "meaning": {"type": "string"},
+                "next": {"type": "string"},
+                "fuel_or_rest": {"type": ["string", "null"]},
+            },
+            "required": ["vs_last", "meaning", "next", "fuel_or_rest"],
+        },
         "reasons": {
             "type": "array",
             "items": {
@@ -124,8 +150,8 @@ DECISION_SCHEMA = {
         "safety_flag": {"type": ["string", "null"]},
     },
     "required": [
-        "decision", "today", "why", "reasons", "plan_diff", "specialist_notes",
-        "memory_to_add", "question", "safety_flag",
+        "decision", "today", "why", "reply", "debrief", "reasons", "plan_diff",
+        "specialist_notes", "memory_to_add", "question", "safety_flag",
     ],
 }
 
@@ -175,7 +201,7 @@ def active_provider():
     return provider
 
 
-def get_decision(briefing_text, message_text, image_base64=None):
+def get_decision(briefing_text, message_text, image_base64=None, history=None):
     """Make the one model call, through whichever provider is
     configured. `image_base64` is a screenshot the athlete attached
     (CLAUDE.md: "send the image to the model directly" -- no separate
@@ -191,5 +217,5 @@ def get_decision(briefing_text, message_text, image_base64=None):
 
     return provider.get_structured(
         _load_system_prompt(), user_content, DECISION_SCHEMA,
-        image_base64=image_base64,
+        image_base64=image_base64, history=history,
     )

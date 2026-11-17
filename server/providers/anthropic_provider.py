@@ -12,10 +12,11 @@ import anthropic
 from . import PlannerError
 
 DEFAULT_MODEL = "claude-sonnet-5"
-MAX_TOKENS = 2000
+MAX_TOKENS = 4000
 
 
-def get_structured(system_prompt, user_content, schema, image_base64=None):
+def get_structured(system_prompt, user_content, schema, image_base64=None,
+                   history=None):
     model = os.environ.get("ANTHROPIC_MODEL", DEFAULT_MODEL)
     client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
 
@@ -42,7 +43,8 @@ def get_structured(system_prompt, user_content, schema, image_base64=None):
                 "input_schema": schema,
             }],
             tool_choice={"type": "tool", "name": "submit_response"},
-            messages=[{"role": "user", "content": message_content}],
+            messages=[*(history or []),
+                      {"role": "user", "content": message_content}],
         )
     except anthropic.APIError as e:
         raise PlannerError(f"Anthropic call failed: {e}") from e

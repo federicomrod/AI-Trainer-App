@@ -33,11 +33,23 @@ enum Config {
         "http://Federicos-MacBook-Pro.local:8000",
     ]
 
+    private static let launchOverride: String? = {
+        let value = ProcessInfo.processInfo.environment["HYBRID_COACH_URL"]?
+            .trimmingCharacters(in: .whitespaces)
+        return (value?.isEmpty ?? true) ? nil : value
+    }()
+
     /// Every address worth trying, best first. ServerDiscovery works
     /// down this list and keeps the first that answers as a real,
     /// working backend.
+    ///
+    /// Launching with HYBRID_COACH_URL set (e.g. from Xcode's scheme or
+    /// `SIMCTL_CHILD_HYBRID_COACH_URL=http://localhost:8000 xcrun simctl
+    /// launch ...`) uses that address and nothing else -- for testing
+    /// in the Simulator against a local server without touching the
+    /// deployed one. Unset, nothing changes.
     static let backendCandidates: [URL] = (
-        [deployedBackend] + localBackends
+        launchOverride.map { [$0] } ?? [deployedBackend] + localBackends
     ).compactMap { address in
         let trimmed = address.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? nil : URL(string: trimmed)

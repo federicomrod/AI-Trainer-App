@@ -108,9 +108,10 @@ final class ChatViewModel: ObservableObject {
 
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
-    // Owned here, not by the button, so the send arrow can finish a
-    // recording in progress rather than sending around it.
-    @StateObject private var voice = SpeechRecognizer()
+    // Owned by MainTabView, so the big centre mic in the tab bar can
+    // start a take here; observed here so the send arrow can still
+    // finish a recording in progress rather than sending around it.
+    @ObservedObject var voice: SpeechRecognizer
     /// Whether the typing field holds the keyboard. Tracked explicitly
     /// because the keyboard covers the tab bar while it's up: with no
     /// way to put it away, the app was unusable until it was
@@ -259,7 +260,7 @@ struct ChatView: View {
                         .accessibilityLabel("Screenshot sent with this message")
                 }
                 Text(text)
-                    .foregroundStyle(isUser ? Theme.background : Theme.textPrimary)
+                    .foregroundStyle(isUser ? Theme.onAccent : Theme.textPrimary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -318,10 +319,16 @@ struct ChatView: View {
 
     private var messageBar: some View {
         VStack(spacing: 12) {
-            // Primary: the main way to talk to the coach.
+            // Started from the centre mic in the tab bar. Always in the
+            // view tree, because it is what turns a finished take into
+            // a sent message; drawn only while a take is under way (or
+            // to show a voice error), so there aren't two big mics.
             VoiceInputButton(recognizer: voice, text: $viewModel.draft) {
                 Task { await viewModel.send() }
             }
+            .frame(height: voice.isActive || voice.errorMessage != nil ? nil : 0)
+            .opacity(voice.isActive || voice.errorMessage != nil ? 1 : 0)
+            .clipped()
 
             // Secondary: typing stays fully available, just visually
             // smaller now that voice leads.
@@ -380,5 +387,5 @@ struct ChatView: View {
 }
 
 #Preview {
-    ChatView()
+    ChatView(voice: SpeechRecognizer())
 }

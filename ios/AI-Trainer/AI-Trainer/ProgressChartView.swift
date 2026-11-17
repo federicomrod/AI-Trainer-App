@@ -72,6 +72,7 @@ struct ProgressChartView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 statsSection(progress.stats)
+                WeeklyShareSection(progress: progress)
                 weeklySessionsSection(progress.weeklySessions)
 
                 let sortedExercises = progress.lifts.keys.sorted()
@@ -103,7 +104,7 @@ struct ProgressChartView: View {
         if !tiles.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Stats")
-                    .font(Theme.rounded(.headline, weight: .bold))
+                    .font(Theme.font(.headline, weight: .bold))
                     .foregroundStyle(Theme.textPrimary)
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(tiles) { tile in
@@ -112,7 +113,7 @@ struct ProgressChartView: View {
                                 .font(.caption)
                                 .foregroundStyle(Theme.textSecondary)
                             Text(tile.value)
-                                .font(Theme.rounded(.title3, weight: .bold))
+                                .font(Theme.font(.title3, weight: .bold))
                                 .foregroundStyle(Theme.textPrimary)
                         }
                         .padding()
@@ -152,7 +153,7 @@ struct ProgressChartView: View {
     private func weeklySessionsSection(_ counts: [WeeklySessionCount]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Sessions per week")
-                .font(Theme.rounded(.headline, weight: .bold))
+                .font(Theme.font(.headline, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
             Chart(counts) { point in
                 BarMark(
@@ -177,7 +178,7 @@ struct ProgressChartView: View {
     private func liftSection(name: String, points: [LiftPoint]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(name)
-                .font(Theme.rounded(.headline, weight: .bold))
+                .font(Theme.font(.headline, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
             Chart(points) { point in
                 AreaMark(

@@ -27,7 +27,7 @@ struct ConnectionErrorView: View {
                 .foregroundStyle(Theme.accent)
 
             Text("Can't reach your coach")
-                .font(Theme.rounded(.title2, weight: .bold))
+                .font(Theme.font(.title2, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
 
             Text("Nothing answered at \(host).")
@@ -44,16 +44,16 @@ struct ConnectionErrorView: View {
                 HStack {
                     Spacer()
                     if isRetrying {
-                        ProgressView().tint(Theme.background)
+                        ProgressView().tint(Theme.onAccent)
                     } else {
                         Text("Try again")
-                            .font(Theme.rounded(.headline, weight: .bold))
+                            .font(Theme.font(.headline, weight: .bold))
                     }
                     Spacer()
                 }
                 .padding()
                 .background(Theme.accent, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-                .foregroundStyle(Theme.background)
+                .foregroundStyle(Theme.onAccent)
             }
             .buttonStyle(.plain)
             .disabled(isRetrying)

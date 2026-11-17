@@ -2,108 +2,243 @@
 //  Theme.swift
 //  AI-Trainer
 //
-//  The whole visual language in one place: dark-first, warm charcoal
-//  (not navy, not pure black), one confident accent spent sparingly,
-//  soft rounded cards. This is a companion, not a dashboard -- no
-//  red/green status coding and no gauges/rings anywhere in this app;
-//  a single accent carries emphasis instead, on whatever's the hero
-//  of that particular screen (today's session, a trend line).
+//  The whole visual language in one place, from the approved mockup
+//  (docs/overnight-ios-brief.md, "The look"): near-black background,
+//  three stepped surfaces, neon lime for strength and "done", a cool
+//  blue for endurance. Heavy SF Pro with tight tracking for headings,
+//  large radii everywhere.
 //
 //  Applied at the root via .preferredColorScheme(.dark) and .tint(),
-//  so most controls (buttons, pickers, the tab bar's selected icon)
-//  pick up the accent automatically with no per-view work.
+//  so most controls pick up the lime automatically. Anything that puts
+//  text ON lime must use Theme.onAccent -- white on lime is unreadable.
 //
-//  Second pass: the first visual pass was deliberately restricted to
-//  color/type/spacing on top of default SwiftUI components. This one
-//  lifts that -- real card elevation (gradient fill, shadow) on
-//  whatever's the hero of a screen, SF Rounded for headers, a faint
-//  warm bleed in the background instead of a flat fill. Still one
-//  accent, still no rings/scores -- structure and material, not new
-//  colors.
+//  The older names (card, cardElevated, textSecondary, ...) are kept
+//  as aliases of the new tokens so every screen keeps compiling and
+//  picks up the new look without a rewrite.
 
 import SwiftUI
 
-enum Theme {
-    // Warm charcoal. Deliberately not navy, not pure black -- a hint
-    // of warmth in the darkness rather than a cold "data" tone.
-    static let background = Color(red: 0.098, green: 0.090, blue: 0.086)
-    static let card = Color(red: 0.157, green: 0.145, blue: 0.137)
-    static let cardElevated = Color(red: 0.196, green: 0.180, blue: 0.169)
-
-    // The one accent, used for the hero element of each screen and
-    // nothing else -- not status coding, not decoration.
-    static let accent = Color(red: 1.0, green: 0.616, blue: 0.290)
-
-    static let textPrimary = Color(red: 0.961, green: 0.941, blue: 0.914)
-    static let textSecondary = Color(red: 0.663, green: 0.624, blue: 0.584)
-
-    static let cardRadius: CGFloat = 20
-    static let heroCardRadius: CGFloat = 24
-    static let controlRadius: CGFloat = 14
-
-    /// SF Rounded for headers -- the quick, real-difference change
-    /// toward Day One/Things 3's warmth instead of default San
-    /// Francisco everywhere.
-    static func rounded(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
-        .system(style, design: .rounded).weight(weight)
-    }
-}
-
-/// The subtle gradient fill for whatever card is leading a screen
-/// (today's session, today's entry in Week) -- not a flat color, a
-/// soft lift from cardElevated into card so it reads as lit from
-/// above rather than a flat rectangle.
-extension View {
-    func heroCard() -> some View {
-        self
-            .background(
-                LinearGradient(
-                    colors: [Theme.cardElevated, Theme.card],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: Theme.heroCardRadius)
-            )
-            .shadow(color: .black.opacity(0.4), radius: 18, x: 0, y: 10)
-            .shadow(color: Theme.accent.opacity(0.08), radius: 24, x: 0, y: 0)
-    }
-
-    /// The normal, non-hero card -- flat fill, no shadow. Still soft
-    /// and rounded, just not competing for attention.
-    func flatCard(radius: CGFloat = Theme.cardRadius) -> some View {
-        self.background(Theme.card, in: RoundedRectangle(cornerRadius: radius))
-    }
-
-    /// A finished/past entry: lower contrast, tighter, sits flatter
-    /// than a flat card even -- a record to glance at, not something
-    /// competing with what's still actionable.
-    func quietCard(radius: CGFloat = Theme.cardRadius) -> some View {
-        self
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: radius))
-            .opacity(0.72)
-    }
-
-    /// The app-wide backdrop: warm charcoal with a faint radial bleed
-    /// of the accent color from the top, instead of one flat fill.
-    /// This alone is a big part of why Flighty/Day One read as alive
-    /// rather than just "dark mode."
-    func appBackground() -> some View {
-        self.background(
-            ZStack {
-                Theme.background
-                RadialGradient(
-                    colors: [Theme.accent.opacity(0.06), Theme.accent.opacity(0.0)],
-                    center: .top, startRadius: 0, endRadius: 480
-                )
-            }
-            .ignoresSafeArea()
+extension Color {
+    /// "#D4FF3A" -> Color. Only for the fixed tokens below.
+    init(hex: UInt32) {
+        self.init(
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255
         )
     }
 }
 
-/// One SF Symbol per session type, filled style, always accent-
-/// colored -- shown consistently in Today and Week so a session's
-/// kind reads at a glance instead of needing to parse the label text.
+enum Theme {
+    // MARK: Colors
+
+    static let background = Color(hex: 0x09090B)
+    /// Three surface steps, lowest to highest.
+    static let surface1 = Color(hex: 0x141417)
+    static let surface2 = Color(hex: 0x1C1C21)
+    static let surface3 = Color(hex: 0x25252B)
+
+    static let textPrimary = Color(hex: 0xF4F4F6)
+    static let textMuted = Color(hex: 0x9A9AA5)
+
+    /// Neon lime: strength, "done", the primary action.
+    static let accent = Color(hex: 0xD4FF3A)
+    /// Text and icons drawn on top of lime.
+    static let onAccent = Color(hex: 0x0A0A0A)
+    /// Endurance blue: ride, run, swim, intervals.
+    static let endurance = Color(hex: 0x6C8CFF)
+
+    // Older names, kept so existing screens compile unchanged.
+    static let card = surface1
+    static let cardElevated = surface2
+    static let textSecondary = textMuted
+
+    // MARK: Shape
+
+    static let heroCardRadius: CGFloat = 28
+    static let cardRadius: CGFloat = 24
+    static let rowRadius: CGFloat = 18
+    static let controlRadius: CGFloat = 18
+
+    // MARK: Type
+
+    /// SF Pro at a text style, so Dynamic Type still works.
+    static func font(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+        .system(style).weight(weight)
+    }
+
+    /// The big screen heading ("Today"): heavy SF Pro.
+    static let screenTitle = Font.system(size: 40, weight: .heavy)
+    /// Small caps-style label above a heading (the date on Today).
+    static let eyebrow = Font.system(.footnote).weight(.semibold)
+}
+
+extension View {
+    /// A big heavy heading with the tight tracking from the mockup.
+    func screenTitleStyle() -> some View {
+        self.font(Theme.screenTitle)
+            .tracking(-1.2)
+            .foregroundStyle(Theme.textPrimary)
+    }
+
+    /// The small label above a heading, e.g. "MONDAY 16 NOV".
+    func eyebrowStyle() -> some View {
+        self.font(Theme.eyebrow)
+            .tracking(0.6)
+            .textCase(.uppercase)
+            .foregroundStyle(Theme.textMuted)
+    }
+
+    /// The card leading a screen (today's session): the highest
+    /// surface, largest radius, a hairline edge so it lifts off the
+    /// near-black background.
+    func heroCard() -> some View {
+        self
+            .background(Theme.surface2, in: RoundedRectangle(cornerRadius: Theme.heroCardRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.heroCardRadius)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+            )
+    }
+
+    /// The normal card.
+    func flatCard(radius: CGFloat = Theme.cardRadius) -> some View {
+        self.background(Theme.surface1, in: RoundedRectangle(cornerRadius: radius))
+    }
+
+    /// A finished/past entry: same surface, lower contrast.
+    func quietCard(radius: CGFloat = Theme.cardRadius) -> some View {
+        self
+            .background(Theme.surface1, in: RoundedRectangle(cornerRadius: radius))
+            .opacity(0.72)
+    }
+
+    /// One wide, low row (an exercise, a goal).
+    func rowCard(fill: Color = Theme.surface2) -> some View {
+        self.background(fill, in: RoundedRectangle(cornerRadius: Theme.rowRadius))
+    }
+
+    /// The app-wide backdrop: flat near-black.
+    func appBackground() -> some View {
+        self.background(Theme.background.ignoresSafeArea())
+    }
+}
+
+/// The one big lime action on a screen ("Start workout"). Full width,
+/// fully round, dark text on lime.
+struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.headline).weight(.bold))
+            .foregroundStyle(Theme.onAccent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Theme.accent, in: Capsule())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}
+
+/// A quieter round button on a raised surface ("Why this").
+struct SecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.subheadline).weight(.semibold))
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Theme.surface3, in: Capsule())
+            .opacity(configuration.isPressed ? 0.75 : 1)
+    }
+}
+
+extension ButtonStyle where Self == PrimaryButtonStyle {
+    static var primary: PrimaryButtonStyle { PrimaryButtonStyle() }
+}
+
+extension ButtonStyle where Self == SecondaryButtonStyle {
+    static var secondary: SecondaryButtonStyle { SecondaryButtonStyle() }
+}
+
+/// Lays chips out left to right, wrapping onto new lines -- the
+/// exercise chips on Today's card.
+struct ChipFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        let width = rows.map(\.width).max() ?? 0
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in row.indices {
+                var size = subviews[index].sizeThatFits(.unspecified)
+                size.width = min(size.width, bounds.width)  // a very long chip truncates
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+        var rows: [Row] = [Row()]
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let needed = rows[rows.count - 1].indices.isEmpty ? size.width : rows[rows.count - 1].width + spacing + size.width
+            if needed > width, !rows[rows.count - 1].indices.isEmpty {
+                rows.append(Row())
+            }
+            var row = rows[rows.count - 1]
+            row.width = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+            row.height = max(row.height, size.height)
+            row.indices.append(index)
+            rows[rows.count - 1] = row
+        }
+        return rows
+    }
+}
+
+/// A small fully-round chip: "Bench press · 4 x 8-12".
+struct Pill: View {
+    let text: String
+    var fill: Color = Theme.surface3
+    var foreground: Color = Theme.textPrimary
+
+    var body: some View {
+        Text(text)
+            .font(.system(.caption).weight(.semibold))
+            .lineLimit(1)
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(fill, in: Capsule())
+    }
+}
+
+/// One SF Symbol per session type, shown consistently in Today and
+/// Week so a session's kind reads at a glance. Colored by family:
+/// lime for strength, blue for endurance (see `tint(for:)`).
 enum SessionTypeIcon {
+    /// Endurance work is blue, everything else (strength, rest) lime.
+    static func isEndurance(_ type: String) -> Bool {
+        let lowered = type.lowercased()
+        return ["ride", "cycl", "run", "swim", "interval"].contains { lowered.contains($0) }
+    }
+
+    static func tint(for type: String) -> Color {
+        isEndurance(type) ? Theme.endurance : Theme.accent
+    }
+
     static func symbolName(for type: String) -> String {
         let lowered = type.lowercased()
         if lowered.contains("push") { return "figure.strengthtraining.traditional" }
@@ -111,7 +246,7 @@ enum SessionTypeIcon {
         // figure.run at a glance (similar dynamic-pose silhouette) --
         // rowing's pulling motion is a much more distinct shape.
         if lowered.contains("pull") { return "figure.rower" }
-        if lowered.contains("legs") { return "figure.squat" }
+        if lowered.contains("legs") { return "figure.cross.training" }
         if lowered.contains("swim") { return "figure.pool.swim" }
         if lowered.contains("run") { return "figure.run" }
         if lowered.contains("ride") || lowered.contains("cycl") { return "figure.outdoor.cycle" }

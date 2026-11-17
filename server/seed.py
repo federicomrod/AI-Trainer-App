@@ -12,6 +12,7 @@ Usage:
     python3 seed.py            # default: messy_two_weeks
     python3 seed.py messy      # same as above
     python3 seed.py calm       # the uneventful-week fixture
+    python3 seed.py federico   # Federico's real history (2026-11-16)
 """
 
 import importlib
@@ -22,6 +23,7 @@ from db import get_connection, init_db, wipe
 FIXTURES = {
     "messy": "fixtures.messy_two_weeks",
     "calm": "fixtures.calm_two_weeks",
+    "federico": "fixtures.federico",
 }
 DEFAULT_FIXTURE = "messy"
 

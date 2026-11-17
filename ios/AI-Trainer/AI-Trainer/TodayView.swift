@@ -42,6 +42,16 @@ final class TodayViewModel: ObservableObject {
 
     private let client = APIClient()
 
+    /// Goals in priority order, from GET /goals. Empty until loaded.
+    @Published var goals: [String] = []
+
+    /// Goals for the card under the session. Progress bars are only
+    /// drawn from real numbers, and /goals is plain text with no
+    /// baseline or target, so for now the card lists the text only.
+    func loadGoals() async {
+        goals = (try? await client.fetchGoals().goals) ?? goals
+    }
+
     #if os(iOS)
     func loadAttachedImage() async {
         guard let item = photoPickerItem else { return }
@@ -166,6 +176,7 @@ struct TodayView: View {
     @State private var showingGoals = false
     @State private var showingSettings = false
     @State private var showingWhyDetail = false
+    @State private var showingWorkout = false
     /// See ChatView: the keyboard covers the tab bar, so there has to
     /// be a way to put it away.
     @FocusState private var draftFocused: Bool
@@ -174,19 +185,22 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    header
                     if viewModel.isShowingCached {
                         OfflineBanner(savedAt: viewModel.cachedAt) {
                             Task { await viewModel.loadToday() }
                         }
                     }
                     content
+                    goalsCard
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .appBackground()
             .scrollContentBackground(.hidden)
-            .navigationTitle("Today")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .onTapGesture { draftFocused = false }
             .toolbar {
@@ -225,8 +239,15 @@ struct TodayView: View {
             .sheet(isPresented: $showingLogSession) {
                 LogSessionView()
             }
-            .sheet(isPresented: $showingGoals) {
+            .sheet(isPresented: $showingGoals, onDismiss: {
+                Task { await viewModel.loadGoals() }
+            }) {
                 GoalsView()
+            }
+            .fullScreenCover(isPresented: $showingWorkout) {
+                if let session = viewModel.response?.decision?.today {
+                    WorkoutView(session: session)
+                }
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
@@ -239,6 +260,19 @@ struct TodayView: View {
                     messageBar
                 }
             }
+            .task { await viewModel.loadGoals() }
+            #if DEBUG
+            // Screenshots only: `-screenshotWorkout YES` opens the
+            // workout a few seconds after today's session arrives.
+            .onChange(of: viewModel.response?.decision?.today.exercises.count) {
+                guard UserDefaults.standard.bool(forKey: "screenshotWorkout"),
+                      viewModel.response?.decision != nil else { return }
+                Task {
+                    try? await Task.sleep(for: .seconds(6))
+                    showingWorkout = true
+                }
+            }
+            #endif
             .task {
                 if viewModel.response == nil, !viewModel.loadCachedIfOffline() {
                     await viewModel.loadToday()
@@ -364,76 +398,112 @@ struct TodayView: View {
             Button("Try again") {
                 Task { await viewModel.loadToday() }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.primary)
         }
         .padding(.top, 40)
     }
 
-    @ViewBuilder
-    private func decisionContent(_ response: TurnResponse) -> some View {
-        // The decision itself is the hero of this screen -- the one
-        // thing the accent color gets spent on here. Every decision
-        // gets the same treatment regardless of KEEP/MODIFY/REST:
-        // color-coding "which decision" would read as a status score,
-        // which this app deliberately doesn't do anywhere.
-        if let decision = response.decision {
-            HStack {
-                Text(decision.decision)
-                    .font(.caption.bold())
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Theme.accent.opacity(0.18))
-                    .foregroundStyle(Theme.accent)
-                    .clipShape(Capsule())
-                Spacer()
-            }
-        }
-
-        ForEach(Array(response.segments.enumerated()), id: \.offset) { index, segment in
-            if index == 0 {
-                // Bold, confident type for the one thing that matters
-                // on this screen -- the coach's actual call for today.
-                // Tappable: reveals the real inputs behind the call
-                // (soreness, this week's plan, recent load) rather
-                // than asking the athlete to just trust one line.
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showingWhyDetail.toggle()
-                    }
-                } label: {
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(segment.text)
-                            .font(Theme.rounded(.title3, weight: .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.leading)
-                        Image(systemName: showingWhyDetail ? "chevron.up" : "chevron.down")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Theme.textSecondary)
-                            .padding(.top, 4)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                if showingWhyDetail {
-                    whyDetail(response.decision?.reasons ?? [])
-                }
-            } else {
-                specialistBlock(segment)
-            }
-        }
-
-        if let decision = response.decision,
-           decision.decision != "REST",
-           !decision.today.exercises.isEmpty {
-            sessionCard(decision.today)
+    /// Small date label over a big heavy "Today".
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
+                .eyebrowStyle()
+            Text("Today")
+                .screenTitleStyle()
         }
     }
 
-    // A specialist's own line, distinguished from Head Coach's by its
-    // own icon + name (SpeakerStyle, per coach-voice.md's cast) rather
-    // than a color -- same treatment as Coach chat, so the two screens
-    // read consistently.
+    @ViewBuilder
+    private func decisionContent(_ response: TurnResponse) -> some View {
+        if let decision = response.decision {
+            heroCard(decision, coachLine: decision.why)
+        } else if let first = response.segments.first {
+            // Safety-flagged turns have no decision, only the coach's words.
+            Text(first.text)
+                .font(Theme.font(.title3, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .heroCard()
+        }
+
+        // A specialist chiming in stays visible under the card. The
+        // head coach's full reply lives in Coach chat; the card keeps
+        // to the short `why`.
+        ForEach(Array(response.segments.filter { !$0.isHeadCoach }.enumerated()), id: \.offset) { _, segment in
+            specialistBlock(segment)
+        }
+    }
+
+    /// The one card for today: what, how long, one coaching line, the
+    /// exercises as chips, "Why this", and the big Start button.
+    private func heroCard(_ decision: Decision, coachLine: String) -> some View {
+        let session = decision.today
+        let isRest = decision.decision == "REST" || session.type.lowercased() == "rest"
+        let tint = SessionTypeIcon.tint(for: session.type)
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: SessionTypeIcon.symbolName(for: isRest ? "rest" : session.type))
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 48, height: 48)
+                    .background(tint.opacity(0.14), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName(session.type))
+                        .font(.system(.title2).weight(.heavy))
+                        .tracking(-0.5)
+                        .foregroundStyle(Theme.textPrimary)
+                    if !isRest {
+                        Text("\(session.durationMin) min")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.textMuted)
+                    }
+                }
+                Spacer()
+                Pill(text: decision.decision, fill: Theme.surface3, foreground: Theme.textMuted)
+            }
+
+            Text(coachLine)
+                .font(.callout)
+                .lineLimit(4)
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !session.exercises.isEmpty {
+                ChipFlow(spacing: 6) {
+                    ForEach(session.exercises) { exercise in
+                        Pill(text: "\(exercise.name) · \(exercise.sets) x \(exercise.reps)")
+                    }
+                }
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { showingWhyDetail.toggle() }
+            } label: {
+                Label("Why this", systemImage: showingWhyDetail ? "chevron.up" : "questionmark.circle")
+            }
+            .buttonStyle(.secondary)
+
+            if showingWhyDetail {
+                whyDetail(decision.reasons)
+            }
+
+            if !isRest && !session.exercises.isEmpty {
+                Button {
+                    showingWorkout = true
+                } label: {
+                    Label("Start workout", systemImage: "play.fill")
+                }
+                .buttonStyle(.primary)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .heroCard()
+    }
+
+    // A specialist's own line, marked by its icon and name
+    // (SpeakerStyle), same as in Coach chat.
     private func specialistBlock(_ segment: MessageSegment) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(SpeakerStyle.label(for: segment.speaker).uppercased(), systemImage: SpeakerStyle.icon(for: segment.speaker))
@@ -443,98 +513,93 @@ struct TodayView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.textPrimary)
         }
-        .padding(.top, 2)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .flatCard()
     }
 
-    // The actual inputs behind the call, in plain language -- not the
-    // raw briefing (that's developer debug output; see Settings >
-    // Developer for that). Each reason is a short factor from the
-    // briefing plus whether it backed today's call or was a reason for
-    // caution, so tapping "why" shows real substance instead of a text
-    // dump the athlete never asked for.
+    // The real inputs behind the call, in plain language (the
+    // decision's `reasons`), not the raw briefing.
     @ViewBuilder
     private func whyDetail(_ reasons: [Reason]) -> some View {
-        if reasons.isEmpty {
-            Text("No further detail for this call.")
-                .font(.footnote)
-                .foregroundStyle(Theme.textSecondary)
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .flatCard()
-        } else {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(reasons) { reason in
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: reason.symbolName)
-                            .font(.footnote)
-                            .foregroundStyle(reason.direction == "caution" ? Theme.accent : Theme.textSecondary)
-                            .padding(.top, 1)
-                        Text(reason.factor)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.textPrimary)
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            if reasons.isEmpty {
+                Text("No further detail for this call.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            ForEach(reasons) { reason in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: reason.symbolName)
+                        .font(.footnote)
+                        .foregroundStyle(reason.direction == "caution" ? Theme.accent : Theme.textSecondary)
+                        .padding(.top, 1)
+                    Text(reason.factor)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .flatCard()
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .rowCard(fill: Theme.surface3)
     }
 
+    private func displayName(_ type: String) -> String {
+        type.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    /// Goals in priority order. Text only: there is no measured
+    /// baseline or target behind them yet, so no bar is drawn.
+    /// Tapping opens the goal editor.
     @ViewBuilder
-    private func sessionCard(_ session: TodaySession) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: SessionTypeIcon.symbolName(for: session.type))
-                    .font(.title3)
-                    .foregroundStyle(Theme.accent)
-                Text(session.type.replacingOccurrences(of: "_", with: " ").capitalized)
-                    .font(Theme.rounded(.headline, weight: .bold))
-                    .foregroundStyle(Theme.textPrimary)
-                Spacer()
-                Text("\(session.durationMin) min")
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            if !session.intensityNote.isEmpty {
-                Text(session.intensityNote)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            Divider().overlay(Theme.textSecondary.opacity(0.2))
-            ForEach(session.exercises) { exercise in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(exercise.name)
-                            .font(.subheadline.weight(.medium))
+    private var goalsCard: some View {
+        if !viewModel.goals.isEmpty {
+            Button {
+                showingGoals = true
+            } label: {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Goals")
+                            .font(.system(.title3).weight(.heavy))
                             .foregroundStyle(Theme.textPrimary)
                         Spacer()
-                        Text("\(exercise.sets) x \(exercise.reps)")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.textSecondary)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Theme.textMuted)
                     }
-                    if let note = exercise.note, !note.isEmpty {
-                        Text(note)
-                            .font(.caption)
-                            .foregroundStyle(Theme.textSecondary)
+                    ForEach(Array(viewModel.goals.enumerated()), id: \.offset) { index, goal in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text("\(index + 1)")
+                                .font(.caption.weight(.heavy))
+                                .foregroundStyle(index == 0 ? Theme.onAccent : Theme.textMuted)
+                                .frame(width: 22, height: 22)
+                                .background(index == 0 ? Theme.accent : Theme.surface3, in: Circle())
+                            Text(goal)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.textPrimary)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .rowCard()
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .flatCard()
             }
+            .buttonStyle(.plain)
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .heroCard()
     }
 
     private var messageBar: some View {
         VStack(spacing: 12) {
-            // Primary: the main way to talk to the coach.
-            VoiceInputButton(recognizer: voice, text: $viewModel.messageDraft) {
-                Task { await viewModel.sendDraft() }
-            }
-
-            // Secondary: typing stays fully available, just visually
-            // smaller now that voice leads. Open-ended copy on
+            // Voice lives in the big centre mic of the tab bar now
+            // (it opens Coach). Typing stays here. Open-ended copy on
             // purpose -- a bad night's sleep, a stressful week,
             // travel, none of it is "fitness," but all of it changes
             // what today should look like.
