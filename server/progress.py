@@ -19,6 +19,10 @@ WEEKS_OF_HISTORY = 8
 # actually done.
 COMPLETED = "('done', 'partial', 'unplanned')"
 
+# The session counts below also leave out type 'rest': a rest day the
+# athlete marks "done" is a day off taken as planned, not a session.
+# briefing.py's PROGRESS section already counts it this way.
+
 
 def get_progress(conn, today=None):
     if today is None:
@@ -81,7 +85,7 @@ def _sessions_this_week(conn, today):
     week_end = week_start + timedelta(days=6)
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM sessions WHERE date >= ? AND date <= ? "
-        f"AND status IN {COMPLETED}",
+        f"AND status IN {COMPLETED} AND type != 'rest'",
         (week_start.isoformat(), week_end.isoformat()),
     ).fetchone()
     return row["n"]
@@ -119,7 +123,7 @@ def _weekly_session_counts(conn, today):
         week_end = week_start + timedelta(days=6)
         row = conn.execute(
             "SELECT COUNT(*) AS n FROM sessions WHERE date >= ? AND date <= ? "
-            f"AND status IN {COMPLETED}",
+            f"AND status IN {COMPLETED} AND type != 'rest'",
             (week_start.isoformat(), week_end.isoformat()),
         ).fetchone()
         counts.append({"week_start": week_start.isoformat(), "count": row["n"]})

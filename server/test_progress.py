@@ -14,6 +14,7 @@ os.environ["HYBRID_COACH_DB_PATH"] = os.path.join(tmp, "t.db")
 
 import briefing  # noqa: E402
 import db  # noqa: E402
+import progress  # noqa: E402
 
 conn = db.get_connection()
 db.init_db(conn)
@@ -29,7 +30,7 @@ for d, name, w, reps, sets in [
     conn.execute("INSERT INTO lifts (date, exercise_name, weight, reps, sets) "
                  "VALUES (?,?,?,?,?)", (d, name, w, reps, sets))
 for d, t, mins in [("2026-11-10", "ride", 58), ("2026-11-11", "legs", None),
-                   ("2026-11-12", "push", 45)]:
+                   ("2026-11-12", "push", 45), ("2026-11-15", "rest", None)]:
     conn.execute("INSERT INTO sessions (date, type, status, duration_min) "
                  "VALUES (?, ?, 'done', ?)", (d, t, mins))
 conn.commit()
@@ -42,6 +43,13 @@ checks = [
     ("bench same weight, +1 rep", "same weight, +1 reps" in text),
     ("no weight, no fake delta", "Lateral raise: 4 x 15" in text and "(first number logged" in text),
     ("week counts", "week of 2026-11-09: 3 sessions (2 lifting, 1 other), 103 min" in text),
+]
+prog = progress.get_progress(conn, today)
+last_week = [w for w in prog["weekly_sessions"] if w["week_start"] == "2026-11-09"]
+checks += [
+    ("progress bars skip rest days", last_week and last_week[0]["count"] == 3),
+    ("this-week count skips rest days",
+     progress.get_progress(conn, date(2026, 11, 15))["stats"]["sessions_this_week"] == 3),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

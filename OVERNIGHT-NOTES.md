@@ -39,11 +39,11 @@ Branch: `ios-modern-look` (from `coach-conversation`, pushed). `main` untouched.
   with no starting number, target or date the app can measure, so
   drawing a bar would mean inventing numbers. The card lists them in
   priority order instead.
-- **A rest day counts as a session on the Progress tab.** Last week's
-  Saturday rest is saved as "done", and `server/progress.py` counts it,
-  so Progress says 6 sessions where you trained 5 times. The weekly
-  card counts only the 5 workouts and shows the rest day as a moon.
-  Fixing the server count is a one-line change; say if you want it.
+- **Rest days no longer count as sessions** (fixed 2026-11-17, after
+  you asked). Progress used to count last Saturday's rest as a session
+  and show 6 where you trained 5 times. `server/progress.py` now skips
+  rest days, the same way the coach's briefing already did, and a test
+  checks it.
 - **One commit per task**, except that the workout screen was committed
   before Today, because Today's Start button needs it.
 - **I re-seeded your local database** with `seed.py federico`, as the

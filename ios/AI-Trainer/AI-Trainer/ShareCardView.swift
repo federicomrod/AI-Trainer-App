@@ -9,9 +9,7 @@
 //
 //  Real numbers only, all from GET /day for each day of the week. A
 //  rest day logged as "done" gets its own dot and is not counted as a
-//  session. (server/progress.py does count it, which is why the card
-//  doesn't reuse that number or draw its weekly bars -- see
-//  OVERNIGHT-NOTES.md.) Goal bars are left out until a goal has a
+//  session, matching server/progress.py. Goal bars are left out until a goal has a
 //  measured baseline and target behind it; today goals are plain text.
 
 import Combine
