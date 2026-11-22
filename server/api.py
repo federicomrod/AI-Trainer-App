@@ -121,6 +121,8 @@ class TurnResponse(BaseModel):
     error: Optional[str]
     error_detail: Optional[str]
     segments: List[MessageSegment] = []
+    cards: List[str] = []
+    week_plan: Optional[List[dict]] = None
     # Plain-language list of what this turn wrote to `sessions`, or
     # None. Present even when the turn errored -- see TurnResult.
     saved_updates: Optional[str] = None
@@ -132,6 +134,12 @@ class ChatMessage(BaseModel):
     text: str
     timestamp: str
     segments: List[MessageSegment] = []
+    # Structured cards drawn under the text: "workout" (the exercises
+    # table) and/or "week" (one row per day). `workout` and `week_plan`
+    # carry their data so history renders the same as a live turn.
+    cards: List[str] = []
+    workout: Optional[dict] = None
+    week_plan: Optional[List[dict]] = None
 
 
 class CheckInRequest(BaseModel):
@@ -383,16 +391,23 @@ def get_messages():
     for row in rows:
         text = row["content"]
         segments = []
+        cards, workout, week_plan = [], None, None
         if row["role"] == "assistant":
             try:
                 decision = json.loads(row["content"])
                 text = coach.reply_text_for(decision)
                 segments = coach.segments_for(decision)
-            except (json.JSONDecodeError, TypeError):
+                cards = list(decision.get("cards") or [])
+                if "workout" in cards:
+                    workout = decision.get("today")
+                if "week" in cards:
+                    week_plan = decision.get("week_plan")
+            except (json.JSONDecodeError, TypeError, AttributeError):
                 pass
         out.append(ChatMessage(
             id=row["id"], role=row["role"], text=text,
             timestamp=row["timestamp"], segments=segments,
+            cards=cards, workout=workout, week_plan=week_plan,
         ))
     return out
 
@@ -538,4 +553,7 @@ def post_turn(req: TurnRequest):
         error_detail=result.error_detail,
         segments=result.segments,
         saved_updates=result.saved_updates,
+        cards=list((result.decision or {}).get("cards") or []),
+        week_plan=((result.decision or {}).get("week_plan")
+                   if "week" in ((result.decision or {}).get("cards") or []) else None),
     )

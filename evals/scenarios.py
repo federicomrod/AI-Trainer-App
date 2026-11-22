@@ -412,10 +412,13 @@ def _excludes(*words):
 
 def _answers_at_length(minimum_chars):
     def check(result, conn, today):
-        n = len((result.reply or "").strip())
-        if n < minimum_chars:
-            return (f"reply is {n} characters; a requested routine needs "
-                    f"the whole session")
+        # The routine is the structured exercise list now, drawn as a
+        # table; the reply is only its short lead-in.
+        exercises = ((result.decision or {}).get("today") or {}).get("exercises") or []
+        cards = (result.decision or {}).get("cards") or []
+        if len(exercises) < 4 or "workout" not in cards:
+            return (f"a requested routine needs 4+ exercises and the "
+                    f"'workout' card; got {len(exercises)} exercises, cards={cards}")
         return None
     return check
 
@@ -703,5 +706,43 @@ SCENARIOS += [
         profile={**FEDERICO_PROFILE, "goals": ["Run a Hyrox", "Aesthetic hypertrophy"]},
         sessions=[(3, "legs", "done", "Smith squats, hack squat")],
         checks={"asks for the date": _asks_for_the_date},
+    ),
+]
+
+
+# --- readable answers: structure goes in cards, not in the paragraph ---
+
+def _week_is_a_card(result, conn, today):
+    d = result.decision or {}
+    plan = d.get("week_plan") or []
+    if "week" not in (d.get("cards") or []) or len(plan) < 4:
+        return (f"a multi-day plan needs the 'week' card and 4+ days; got "
+                f"cards={d.get('cards')}, {len(plan)} days")
+    return None
+
+
+def _reply_has_no_list_or_markdown(result, conn, today):
+    text = result.reply or ""
+    bullets = [l for l in text.splitlines() if l.lstrip().startswith(("-", "*", "#", "|"))]
+    if bullets or "**" in text:
+        return f"the reply types a list or markdown instead of using the cards: {bullets[:2]}"
+    if len(text) > 600:
+        return f"the reply is {len(text)} characters; the card carries the detail"
+    return None
+
+
+SCENARIOS += [
+    Scenario(
+        name="week_is_cards",
+        about=("A multi-day ask must come back as the week card and a "
+               "short reply, not a day-by-day paragraph."),
+        message="What does my training look like from Tuesday to Friday?",
+        profile=FEDERICO_PROFILE,
+        sessions=[(2, "pull", "done", "Neutral pulldown, rows"),
+                  (5, "legs", "done", "Smith squats, curls")],
+        checks={
+            "the week card has the days": _week_is_a_card,
+            "the reply has no list": _reply_has_no_list_or_markdown,
+        },
     ),
 ]

@@ -88,6 +88,28 @@ DECISION_SCHEMA = {
         },
         "why": {"type": "string"},
         "reply": {"type": ["string", "null"]},
+        # What the chat shows UNDER the reply as structured cards, so a
+        # routine or a multi-day plan is a table to scan, not a paragraph.
+        # "workout" draws today.exercises; "week" draws week_plan.
+        "cards": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["workout", "week"]},
+        },
+        "week_plan": {
+            "type": ["array", "null"],
+            "items": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string"},
+                    "title": {"type": "string"},
+                    "kind": {"type": "string",
+                             "enum": ["gym", "cardio", "rest", "other"]},
+                    "detail": {"type": ["string", "null"]},
+                    "optional": {"type": "boolean"},
+                },
+                "required": ["date", "title", "kind", "detail", "optional"],
+            },
+        },
         # The post-session debrief, for the app's debrief card. null
         # unless the athlete just logged or described a finished session.
         "debrief": {
@@ -150,7 +172,7 @@ DECISION_SCHEMA = {
         "safety_flag": {"type": ["string", "null"]},
     },
     "required": [
-        "decision", "today", "why", "reply", "debrief", "reasons", "plan_diff",
+        "decision", "today", "why", "reply", "cards", "week_plan", "debrief", "reasons", "plan_diff",
         "specialist_notes", "memory_to_add", "question", "safety_flag",
     ],
 }
