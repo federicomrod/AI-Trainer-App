@@ -87,7 +87,11 @@ final class ChatViewModel: ObservableObject {
             if let reply = result.reply {
                 messages.append(ChatMessage(
                     id: placeholderID - 1, role: "assistant", text: reply, timestamp: "",
-                    segments: result.segments
+                    segments: result.segments,
+                    cards: result.cards,
+                    // A live turn carries the workout inside the decision.
+                    workout: result.cards.contains("workout") ? result.decision?.today : nil,
+                    weekPlan: result.weekPlan
                 ))
             } else {
                 // planner_error or validation_error: nothing safe to
@@ -118,6 +122,11 @@ struct ChatView: View {
     /// force-quit. Three ways out now -- Done on the keyboard's own
     /// toolbar, dragging the conversation, and sending.
     @FocusState private var draftFocused: Bool
+    /// A workout opened from a chat card's header.
+    @State private var workoutLaunch: ChatWorkoutLaunch?
+    #if DEBUG
+    private static var didDebugSend = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -155,6 +164,16 @@ struct ChatView: View {
                 .onChange(of: viewModel.isSending) {
                     scrollToBottom(proxy)
                 }
+                #if DEBUG
+                // Screenshots only: `-chatScrollTo <message id>` shows
+                // that message at the top once history has loaded.
+                .task(id: viewModel.messages.count) {
+                    let target = UserDefaults.standard.integer(forKey: "chatScrollTo")
+                    guard target != 0, viewModel.messages.contains(where: { $0.id == target }) else { return }
+                    try? await Task.sleep(for: .seconds(1))
+                    proxy.scrollTo(target, anchor: .top)
+                }
+                #endif
             }
             .navigationTitle("Coach")
             .safeAreaInset(edge: .bottom) {
@@ -167,6 +186,19 @@ struct ChatView: View {
                 if viewModel.messages.isEmpty {
                     await viewModel.loadHistory()
                 }
+                #if DEBUG
+                // Simulator checks only: `-chatSendOnLaunch "text"` sends
+                // one message once, through the normal send path.
+                if !ChatView.didDebugSend,
+                   let text = UserDefaults.standard.string(forKey: "chatSendOnLaunch"), !text.isEmpty {
+                    ChatView.didDebugSend = true
+                    viewModel.draft = text
+                    await viewModel.send()
+                }
+                #endif
+            }
+            .fullScreenCover(item: $workoutLaunch) { launch in
+                WorkoutView(session: launch.session)
             }
             #if os(iOS)
             .onChange(of: viewModel.photoPickerItem) {
@@ -226,17 +258,39 @@ struct ChatView: View {
             #else
             bubble(text: message.text, isUser: true)
             #endif
-        } else if message.segments.isEmpty {
-            // Defensive fallback -- shouldn't happen once the backend
-            // always returns segments, but a message with no segments
-            // should still show something rather than vanish.
-            bubble(text: message.text, isUser: false)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(message.segments) { segment in
-                    assistantBubble(segment)
+            VStack(alignment: .leading, spacing: 10) {
+                if message.segments.isEmpty {
+                    // Defensive fallback -- shouldn't happen once the
+                    // backend always returns segments, but a message
+                    // with no segments should still show something
+                    // rather than vanish.
+                    bubble(text: message.text, isUser: false)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(message.segments) { segment in
+                            assistantBubble(segment)
+                        }
+                    }
                 }
+                cards(for: message)
             }
+        }
+    }
+
+    // The structured cards under a reply, full chat width (wider than
+    // the bubble) so a table has room. Text stays above.
+    @ViewBuilder
+    private func cards(for message: ChatMessage) -> some View {
+        if let workout = message.workoutCard {
+            let startable = message.isFromToday && workout.type.lowercased() != "rest"
+            WorkoutTableCard(
+                session: workout,
+                onStart: startable ? { workoutLaunch = ChatWorkoutLaunch(session: workout) } : nil
+            )
+        }
+        if let week = message.weekCard {
+            WeekPlanCard(days: week)
         }
     }
 

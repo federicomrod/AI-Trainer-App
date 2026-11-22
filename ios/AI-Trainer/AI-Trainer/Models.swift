@@ -221,6 +221,10 @@ struct TurnResponse: Codable {
     /// happens before the model call: what was saved has to be named
     /// either way. See server/session_corrections.py.
     let savedUpdates: String?
+    /// Cards to draw under the reply: "workout" (today's exercises,
+    /// from `decision.today`) and/or "week" (`weekPlan`). Usually empty.
+    let cards: [String]
+    let weekPlan: [WeekPlanEntry]?
 
     enum CodingKeys: String, CodingKey {
         case briefing, decision, reply
@@ -229,6 +233,24 @@ struct TurnResponse: Codable {
         case errorDetail = "error_detail"
         case segments
         case savedUpdates = "saved_updates"
+        case cards
+        case weekPlan = "week_plan"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        briefing = try c.decode(String.self, forKey: .briefing)
+        decision = try c.decodeIfPresent(Decision.self, forKey: .decision)
+        reply = try c.decodeIfPresent(String.self, forKey: .reply)
+        safetyFlagged = try c.decode(Bool.self, forKey: .safetyFlagged)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+        errorDetail = try c.decodeIfPresent(String.self, forKey: .errorDetail)
+        segments = try c.decodeIfPresent([MessageSegment].self, forKey: .segments) ?? []
+        savedUpdates = try c.decodeIfPresent(String.self, forKey: .savedUpdates)
+        // New, optional fields: a card that doesn't decode is dropped,
+        // never the whole reply.
+        cards = (try? c.decodeIfPresent([String].self, forKey: .cards)) ?? []
+        weekPlan = (try? c.decodeIfPresent([WeekPlanEntry].self, forKey: .weekPlan)) ?? nil
     }
 
     /// What to tell the athlete when this turn came back with an error.
@@ -261,8 +283,76 @@ struct ChatMessage: Codable, Identifiable {
     let text: String
     let timestamp: String
     let segments: [MessageSegment]
+    /// Structured cards under the text, as on TurnResponse. Old
+    /// history rows have none of these.
+    var cards: [String] = []
+    var workout: TodaySession?
+    var weekPlan: [WeekPlanEntry]?
 
     var isUser: Bool { role == "user" }
+
+    /// The workout table to draw, if this message has one.
+    var workoutCard: TodaySession? {
+        cards.contains("workout") ? workout.flatMap { $0.exercises.isEmpty ? nil : $0 } : nil
+    }
+
+    /// The week card to draw, if this message has one.
+    var weekCard: [WeekPlanEntry]? {
+        cards.contains("week") ? weekPlan.flatMap { $0.isEmpty ? nil : $0 } : nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, role, text, timestamp, segments, cards, workout
+        case weekPlan = "week_plan"
+    }
+
+    init(id: Int, role: String, text: String, timestamp: String,
+         segments: [MessageSegment], cards: [String] = [],
+         workout: TodaySession? = nil, weekPlan: [WeekPlanEntry]? = nil) {
+        self.id = id
+        self.role = role
+        self.text = text
+        self.timestamp = timestamp
+        self.segments = segments
+        self.cards = cards
+        self.workout = workout
+        self.weekPlan = weekPlan
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        role = try c.decode(String.self, forKey: .role)
+        text = try c.decode(String.self, forKey: .text)
+        timestamp = try c.decode(String.self, forKey: .timestamp)
+        segments = try c.decodeIfPresent([MessageSegment].self, forKey: .segments) ?? []
+        // A card that doesn't decode is dropped, never the whole history.
+        cards = (try? c.decodeIfPresent([String].self, forKey: .cards)) ?? []
+        workout = (try? c.decodeIfPresent(TodaySession.self, forKey: .workout)) ?? nil
+        weekPlan = (try? c.decodeIfPresent([WeekPlanEntry].self, forKey: .weekPlan)) ?? nil
+    }
+}
+
+/// One day of a multi-day plan in a coach reply ("week" card).
+struct WeekPlanEntry: Codable, Identifiable {
+    let date: String      // yyyy-MM-dd
+    let title: String
+    let kind: String      // gym | cardio | rest | other
+    let detail: String?
+    let optional: Bool
+
+    var id: String { date + title }
+
+    enum CodingKeys: String, CodingKey { case date, title, kind, detail, optional }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date = try c.decode(String.self, forKey: .date)
+        title = try c.decode(String.self, forKey: .title)
+        kind = (try? c.decodeIfPresent(String.self, forKey: .kind)) ?? "other"
+        detail = try? c.decodeIfPresent(String.self, forKey: .detail)
+        optional = (try? c.decodeIfPresent(Bool.self, forKey: .optional)) ?? false
+    }
 }
 
 /// One day in the current week, from GET /week. `type`/`plannedSummary`
