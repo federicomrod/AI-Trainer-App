@@ -27,23 +27,27 @@ struct MainTabView: View {
     @StateObject private var voice = SpeechRecognizer()
 
     var body: some View {
-        TabView(selection: $selected) {
-            TodayView()
-                .toolbar(.hidden, for: .tabBar)
-                .tag(Tab.today)
-            WeekView()
-                .toolbar(.hidden, for: .tabBar)
-                .tag(Tab.week)
-            ProgressChartView()
-                .toolbar(.hidden, for: .tabBar)
-                .tag(Tab.progress)
-            ChatView(voice: voice)
-                .toolbar(.hidden, for: .tabBar)
-                .tag(Tab.coach)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // The bar sits below the screens in a stack, not on top of them
+        // as a safe-area inset: an inset on the TabView did not reach
+        // the Coach screen, so its typing box ended up under the bar.
+        VStack(spacing: 0) {
+            TabView(selection: $selected) {
+                TodayView()
+                    .toolbar(.hidden, for: .tabBar)
+                    .tag(Tab.today)
+                WeekView()
+                    .toolbar(.hidden, for: .tabBar)
+                    .tag(Tab.week)
+                ProgressChartView()
+                    .toolbar(.hidden, for: .tabBar)
+                    .tag(Tab.progress)
+                ChatView(voice: voice)
+                    .toolbar(.hidden, for: .tabBar)
+                    .tag(Tab.coach)
+            }
             bar
         }
+        .background(Theme.surface1.ignoresSafeArea(edges: .bottom))
     }
 
     private var bar: some View {
