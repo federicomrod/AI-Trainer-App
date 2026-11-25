@@ -86,6 +86,7 @@ struct WeekView: View {
                     // something to weigh equally against what's
                     // actionable right now.
                     let referenceDate = viewModel.days.first(where: { $0.isToday })?.date
+                    ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             if viewModel.isShowingCached {
@@ -109,11 +110,22 @@ struct WeekView: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                .id(day.date)
                             }
                         }
                         .padding()
                     }
                     .scrollContentBackground(.hidden)
+                    #if DEBUG
+                    // Screenshots only: `-weekScrollToEnd YES`.
+                    .task(id: viewModel.days.count) {
+                        guard UserDefaults.standard.bool(forKey: "weekScrollToEnd"),
+                              let last = viewModel.days.last else { return }
+                        try? await Task.sleep(for: .seconds(1))
+                        proxy.scrollTo(last.date, anchor: .bottom)
+                    }
+                    #endif
+                    }
                 }
             }
             .appBackground()
@@ -142,20 +154,26 @@ private struct DayCard: View {
     // with what's actually still actionable.
     private var isQuiet: Bool { isPast && !day.isToday }
 
+    /// The session the day is now: the changed one when a decision
+    /// changed it (push -> legs), otherwise what was planned. The old
+    /// plan is only mentioned in the small note under it.
+    private var titleType: String { day.movedTo ?? day.type }
+    private var isRest: Bool { titleType.lowercased() == "rest" }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             // Consistent with Today's session card -- the same icon
             // for the same type, so a session's kind reads at a
             // glance without parsing the label.
-            Image(systemName: SessionTypeIcon.symbolName(for: day.type))
+            Image(systemName: SessionTypeIcon.symbolName(for: titleType))
                 .font(day.isToday ? .title2 : .body)
-                .foregroundStyle(isQuiet ? Theme.textSecondary : SessionTypeIcon.tint(for: day.type))
+                .foregroundStyle(isQuiet ? Theme.textSecondary : SessionTypeIcon.tint(for: titleType))
                 .frame(width: day.isToday ? 30 : 24)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: isQuiet ? 4 : 6) {
                 HStack {
-                    Text("\(day.weekday) · \(shortDate(day.date))")
+                    Text(DayLabel.from(iso: day.date))
                         .font(Theme.font(isQuiet ? .footnote : .subheadline, weight: .semibold))
                         .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
                     if day.isToday {
@@ -171,43 +189,36 @@ private struct DayCard: View {
                             .clipShape(Capsule())
                     }
                     Spacer()
-                    StatusTag(status: day.status, isQuiet: isQuiet)
+                    // A rest day is just "Rest": no "Done" on it.
+                    if !isRest {
+                        StatusTag(status: day.status, isQuiet: isQuiet)
+                    }
                 }
 
+                Text(SessionTitle.display(titleType))
+                    .font(day.isToday ? Theme.font(.title3, weight: .bold) : .callout.weight(.medium))
+                    .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
+
                 if day.moved {
-                    // Same accent as everywhere else, not a separate
-                    // ad-hoc color -- this marks "something changed
-                    // here," not a status judgment on the day.
+                    // The change, small: what it was before and why.
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "arrow.triangle.branch")
                             .foregroundStyle(Theme.accent)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(displayType(day.type)) → \(day.movedTo ?? "")")
-                                .font(.callout.weight(.medium))
-                                .foregroundStyle(Theme.textPrimary)
-                            if let reason = day.movedReason, !reason.isEmpty {
-                                Text(reason)
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.textSecondary)
-                            }
-                        }
+                        Text(changeNote)
+                            .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(8)
-                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-                } else {
-                    Text(displayType(day.type))
-                        .font(day.isToday ? Theme.font(.title3, weight: .bold) : .callout.weight(.medium))
-                        .foregroundStyle(isQuiet ? Theme.textSecondary : Theme.textPrimary)
+                    .font(.caption)
                 }
 
-                if let summary = summaryText(for: day) {
+                if let summary = summaryText {
                     Text(summary)
                         .font(.footnote)
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(isQuiet ? 1 : nil)
                 }
 
-                if let duration = day.durationMin {
+                if let duration = day.durationMin, !isRest {
                     Text("\(duration) min")
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
@@ -220,25 +231,34 @@ private struct DayCard: View {
         .modifier(DayCardBackground(isToday: day.isToday, isQuiet: isQuiet))
     }
 
-    private func summaryText(for day: WeekDay) -> String? {
+    /// "Changed from Push: reason".
+    private var changeNote: String {
+        let from = "Changed from \(SessionTitle.display(day.type))"
+        guard let reason = day.movedReason?.plainHyphens, !reason.isEmpty else { return from }
+        return "\(from): \(reason)"
+    }
+
+    /// The line under the title. Left out when it only repeats the
+    /// title ("rest" under "Rest", "pull" under "Pull").
+    private var summaryText: String? {
+        let candidates: [String?]
         switch day.status {
         case "done", "partial":
-            return day.actualSummary
+            candidates = [day.actualSummary, day.plannedSummary]
         case "skipped":
-            return day.actualSummary ?? day.plannedSummary
+            candidates = [day.actualSummary, day.plannedSummary]
         default:
-            return day.plannedSummary
+            candidates = [day.plannedSummary]
         }
-    }
-
-    private func displayType(_ type: String) -> String {
-        type.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-
-    private func shortDate(_ iso: String) -> String {
-        let parts = iso.split(separator: "-")
-        guard parts.count == 3 else { return iso }
-        return "\(parts[1])/\(parts[2])"
+        let repeats: Set<String> = [titleType.lowercased(), day.type.lowercased(),
+                                    SessionTitle.display(titleType).lowercased()]
+        for case let text? in candidates {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !repeats.contains(trimmed.lowercased()) {
+                return trimmed.plainHyphens
+            }
+        }
+        return nil
     }
 }
 

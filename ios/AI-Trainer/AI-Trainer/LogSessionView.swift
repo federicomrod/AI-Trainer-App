@@ -199,7 +199,7 @@ struct LogSessionView: View {
             $0.exerciseName.lowercased() == lift.exerciseName.lowercased()
         }
         return VStack(alignment: .leading, spacing: 2) {
-            Text(lift.exerciseName)
+            Text(lift.exerciseName.plainHyphens)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Theme.textPrimary)
             Text(liftSummaryText(lift))
@@ -262,7 +262,7 @@ struct LogSessionView: View {
 
             if !context.relevantExercises.isEmpty {
                 ForEach(context.relevantExercises) { exercise in
-                    Section(exercise.name) {
+                    Section(exercise.name.plainHyphens) {
                         if let hint = lastTimeHint(exercise) {
                             Text(hint)
                                 .font(.footnote)
@@ -314,7 +314,7 @@ struct LogSessionView: View {
 
     private func lastTimeHint(_ exercise: RelevantExercise) -> String? {
         guard let weight = exercise.lastWeight else { return nil }
-        var parts = ["Last time (\(exercise.lastDate ?? "")): \(weight.formatted())kg"]
+        var parts = ["Last time (\(exercise.lastDate.map { DayLabel.from(iso: $0) } ?? "")): \(weight.formatted())kg"]
         if let sets = exercise.lastSets, let reps = exercise.lastReps {
             parts.append("\(sets) × \(reps)")
         }

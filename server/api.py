@@ -317,6 +317,10 @@ class DayDetailResponse(BaseModel):
     duration_min: Optional[int]
     rpe: Optional[float]
     chat_note: Optional[str]
+    # What a coaching decision changed this day to, and why (the
+    # sessions row keeps the original type). None when unchanged.
+    moved_to: Optional[str] = None
+    moved_reason: Optional[str] = None
     lifts: List[DayLift]
     checkin: Optional[DayCheckIn]
 

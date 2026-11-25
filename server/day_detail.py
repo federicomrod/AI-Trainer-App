@@ -12,6 +12,9 @@ reads, just all three keyed to one date instead of a range.
 """
 
 import json
+from datetime import date
+
+from week import _collect_diffs
 
 
 def get_day_detail(conn, date_iso):
@@ -35,6 +38,12 @@ def get_day_detail(conn, date_iso):
     if session is None and not lifts and checkin is None:
         return None
 
+    # A decision that changed this day's plan (e.g. push -> legs). The
+    # sessions row keeps the original type, so this is how the app
+    # knows what the day became -- same lookup the Week view uses.
+    day = date.fromisoformat(date_iso)
+    diff = _collect_diffs(conn, day, day).get(date_iso)
+
     return {
         "date": date_iso,
         "type": session["type"] if session else None,
@@ -44,6 +53,8 @@ def get_day_detail(conn, date_iso):
         "duration_min": session["duration_min"] if session else None,
         "rpe": session["rpe"] if session else None,
         "chat_note": session["notes"] if session else None,
+        "moved_to": diff["to"] if diff else None,
+        "moved_reason": diff["reason"] if diff else None,
         "lifts": [
             {
                 "exercise_name": row["exercise_name"],

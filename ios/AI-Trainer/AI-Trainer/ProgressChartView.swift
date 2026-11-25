@@ -140,7 +140,7 @@ struct ProgressChartView: View {
         }
         for pr in stats.liftPrs {
             tiles.append(StatTile(
-                id: "pr-\(pr.exerciseName)", label: pr.exerciseName,
+                id: "pr-\(pr.exerciseName)", label: pr.exerciseName.plainHyphens,
                 value: "\(formattedWeight(pr.maxWeight))kg"
             ))
         }
@@ -177,7 +177,7 @@ struct ProgressChartView: View {
 
     private func liftSection(name: String, points: [LiftPoint]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(name)
+            Text(name.plainHyphens)
                 .font(Theme.font(.headline, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
             Chart(points) { point in
@@ -217,7 +217,7 @@ struct ProgressChartView: View {
                 AxisValueLabel().foregroundStyle(Theme.textSecondary)
             } }
             if let last = points.last {
-                Text("Last: \(formattedWeight(last.weight))kg on \(last.date)")
+                Text("Last: \(formattedWeight(last.weight))kg on \(DayLabel.from(iso: last.date))")
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
             }

@@ -44,7 +44,7 @@ struct ShareCardView: View {
 
             Spacer().frame(height: 120)
 
-            Text("Week of " + data.weekStart.formatted(.dateTime.day().month(.wide)))
+            Text("Week of " + DayLabel.from(iso: isoDayFormatter.string(from: data.weekStart)))
                 .font(.system(size: 52, weight: .bold))
                 .foregroundStyle(Theme.textMuted)
             Text("\(data.sessionCount)")
@@ -274,7 +274,7 @@ struct WeeklyShareSection: View {
                         Text("\(data.sessionCount) \(data.sessionCount == 1 ? "session" : "sessions")")
                             .font(.title2.weight(.heavy))
                             .foregroundStyle(Theme.textPrimary)
-                        Text("Week of " + data.weekStart.formatted(.dateTime.day().month(.abbreviated)))
+                        Text("Week of " + DayLabel.from(iso: isoDayFormatter.string(from: data.weekStart)))
                             .font(.subheadline)
                             .foregroundStyle(Theme.textMuted)
                     }

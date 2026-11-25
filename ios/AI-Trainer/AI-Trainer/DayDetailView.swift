@@ -73,10 +73,7 @@ struct DayDetailView: View {
     }
 
     private var formattedTitle: String {
-        guard let parsed = isoDayFormatter.date(from: date) else { return date }
-        let f = DateFormatter()
-        f.dateFormat = "EEEE, MMM d"
-        return f.string(from: parsed)
+        DayLabel.from(iso: date)
     }
 
     @ViewBuilder
@@ -188,7 +185,7 @@ struct DayDetailView: View {
 
     private func liftRow(_ lift: DayLift) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(lift.exerciseName)
+            Text(lift.exerciseName.plainHyphens)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Theme.textPrimary)
             Spacer()

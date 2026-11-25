@@ -27,18 +27,7 @@ struct WorkoutTableCard: View {
         VStack(alignment: .leading, spacing: 0) {
             header
                 .padding(16)
-
-            ForEach(groups) { group in
-                Divider().overlay(Color.white.opacity(0.06))
-                groupView(group)
-            }
-
-            Divider().overlay(Color.white.opacity(0.06))
-            Text("\(totalSets) working \(totalSets == 1 ? "set" : "sets")")
-                .font(Theme.font(.footnote, weight: .semibold))
-                .foregroundStyle(Theme.textMuted)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+            ExerciseTable(exercises: session.exercises)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .flatCard()
@@ -122,6 +111,36 @@ struct WorkoutTableCard: View {
         }
     }
 
+    private func displayType(_ type: String) -> String {
+        SessionTitle.display(type)
+    }
+}
+
+/// The exercise rows and the "N working sets" line, shared by the chat
+/// workout card and Today's card. Starts with a divider so it sits
+/// under any header.
+struct ExerciseTable: View {
+    let exercises: [Exercise]
+    /// Off when the table sits in its own box with nothing above it.
+    var leadingDivider = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(groups) { group in
+                if leadingDivider || group.id > 0 {
+                    Divider().overlay(Color.white.opacity(0.06))
+                }
+                groupView(group)
+            }
+            Divider().overlay(Color.white.opacity(0.06))
+            Text("\(totalSets) working \(totalSets == 1 ? "set" : "sets")")
+                .font(Theme.font(.footnote, weight: .semibold))
+                .foregroundStyle(Theme.textMuted)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+        }
+    }
+
     // Exercises in order, consecutive ones sharing a superset label
     // gathered into one group so they're drawn joined.
     private struct ExerciseGroup: Identifiable {
@@ -132,7 +151,7 @@ struct WorkoutTableCard: View {
 
     private var groups: [ExerciseGroup] {
         var out: [ExerciseGroup] = []
-        for exercise in session.exercises {
+        for exercise in exercises {
             let label = exercise.supersetGroup.flatMap { $0.isEmpty ? nil : $0 }
             if let label, let last = out.last, last.label == label {
                 out[out.count - 1] = ExerciseGroup(id: last.id, label: label, exercises: last.exercises + [exercise])
@@ -167,11 +186,8 @@ struct WorkoutTableCard: View {
         }
     }
 
-    private var totalSets: Int { session.exercises.reduce(0) { $0 + max($1.sets, 0) } }
+    private var totalSets: Int { exercises.reduce(0) { $0 + max($1.sets, 0) } }
 
-    private func displayType(_ type: String) -> String {
-        type.replacingOccurrences(of: "_", with: " ").capitalized
-    }
 }
 
 /// One exercise line: name left (wraps), sets x reps right in bold,
@@ -213,7 +229,7 @@ private struct ExerciseTableRow: View {
     }
 
     private var name: some View {
-        Text(exercise.name)
+        Text(exercise.name.plainHyphens)
             .font(Theme.font(.body, weight: .semibold))
             .foregroundStyle(Theme.textPrimary)
             .fixedSize(horizontal: false, vertical: true)

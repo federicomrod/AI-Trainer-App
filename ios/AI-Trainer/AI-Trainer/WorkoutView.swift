@@ -5,7 +5,8 @@
 //  The live gym screen, opened by "Start workout" on Today. One wide,
 //  low row per item in today.exercises (docs/ui-notes.md):
 //
-//  - swipe left marks a row done (lime check), swipe right skips it
+//  - swipe left marks a row done (lime check), swipe right skips it;
+//    tapping the circle toggles done, and a swipe can be undone
 //  - tap a row to open it: technique, weight and reps steppers, Log set
 //  - Log set starts the rest countdown from the row's rest_sec
 //  - rows sharing a superset_group are drawn joined
@@ -84,12 +85,21 @@ final class WorkoutViewModel: ObservableObject {
         var last: [String: Double] = [:]
         for (name, points) in progress.lifts {
             if let weight = points.last?.weight {
-                last[name.lowercased()] = weight
+                last[Self.matchKey(name)] = weight
             }
         }
         for index in rows.indices where rows[index].weight == nil {
-            rows[index].weight = last[rows[index].exercise.name.lowercased()]
+            rows[index].weight = last[Self.matchKey(rows[index].exercise.name)]
         }
+    }
+
+    /// The same exercise written two ways still matches: case, dash
+    /// style ("high–wide" vs "high-wide") and spacing are ignored.
+    /// Nothing looser than that -- a different exercise's weight would
+    /// be an invented number.
+    static func matchKey(_ name: String) -> String {
+        name.plainHyphens.lowercased()
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     var doneCount: Int { rows.filter { $0.status == .done }.count }
@@ -102,6 +112,50 @@ final class WorkoutViewModel: ObservableObject {
         guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
         rows[index].status = rows[index].status == status ? .todo : status
         if expandedID == id, rows[index].status != .todo { expandedID = nil }
+    }
+
+    /// The last swipe, so it can be undone from the banner.
+    struct Change: Equatable {
+        let rowID: Int
+        let previous: RowStatus
+        let text: String
+    }
+    @Published var lastChange: Change?
+
+    /// A swipe: mark the row, and remember how it was so Undo can put
+    /// it back.
+    func swipe(_ id: Int, _ status: RowStatus) {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
+        let previous = rows[index].status
+        mark(id, status)
+        let name = rows[index].exercise.name.plainHyphens
+        let text: String
+        switch rows[index].status {
+        case .done: text = "\(name) done"
+        case .skipped: text = "\(name) skipped"
+        case .todo: text = "\(name) back to do"
+        }
+        let change = Change(rowID: id, previous: previous, text: text)
+        lastChange = change
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            if lastChange == change { lastChange = nil }
+        }
+    }
+
+    func undoLastChange() {
+        guard let change = lastChange,
+              let index = rows.firstIndex(where: { $0.id == change.rowID }) else { return }
+        rows[index].status = change.previous
+        lastChange = nil
+    }
+
+    /// The circle: done becomes to-do, anything else becomes done.
+    func toggleDone(_ id: Int) {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
+        rows[index].status = rows[index].status == .done ? .todo : .done
+        if expandedID == id, rows[index].status == .done { expandedID = nil }
+        lastChange = nil
     }
 
     func logSet(_ id: Int) {
@@ -222,8 +276,13 @@ struct WorkoutView: View {
     @State private var confirmingClose = false
     @FocusState private var weightFocused: Int?
 
-    init(session: TodaySession) {
+    /// What the header calls the session. Today passes the name it
+    /// shows ("Legs") so a plan that only says "gym" reads the same here.
+    private let title: String
+
+    init(session: TodaySession, title: String? = nil) {
         _viewModel = StateObject(wrappedValue: WorkoutViewModel(session: session))
+        self.title = title ?? SessionTitle.display(session.type)
     }
 
     var body: some View {
@@ -244,7 +303,7 @@ struct WorkoutView: View {
                         // Swipe left: done. Swipe right: skip.
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button {
-                                viewModel.mark(row.id, .done)
+                                viewModel.swipe(row.id, .done)
                             } label: {
                                 Label(row.status == .done ? "Undo" : "Done", systemImage: "checkmark")
                             }
@@ -252,14 +311,14 @@ struct WorkoutView: View {
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button {
-                                viewModel.mark(row.id, .skipped)
+                                viewModel.swipe(row.id, .skipped)
                             } label: {
                                 Label(row.status == .skipped ? "Undo" : "Skip", systemImage: "forward.fill")
                             }
                             .tint(Theme.surface3)
                         }
                 }
-                Text("Swipe left when done, right to skip. Tap to log sets.")
+                Text("Tap the circle or swipe left when done, right to skip. Tap a name to log sets.")
                     .font(.caption)
                     .foregroundStyle(Theme.textMuted)
                     .frame(maxWidth: .infinity)
@@ -280,7 +339,7 @@ struct WorkoutView: View {
             // first row, logs one set on it (starting the rest timer) and
             // marks the second done. Nothing is sent to the server.
             if UserDefaults.standard.bool(forKey: "screenshotWorkout"), viewModel.rows.count > 1 {
-                viewModel.mark(viewModel.rows[1].id, .done)
+                viewModel.swipe(viewModel.rows[1].id, .done)
                 viewModel.toggleExpanded(viewModel.rows[0].id)
                 viewModel.logSet(viewModel.rows[0].id)
             }
@@ -325,7 +384,7 @@ struct WorkoutView: View {
             .accessibilityLabel("Close workout")
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(viewModel.session.type.replacingOccurrences(of: "_", with: " ").capitalized)
+                Text(title)
                     .font(.system(.title3).weight(.heavy))
                     .tracking(-0.4)
                     .foregroundStyle(Theme.textPrimary)
@@ -374,6 +433,22 @@ struct WorkoutView: View {
 
     private var finishBar: some View {
         VStack(spacing: 8) {
+            if let change = viewModel.lastChange {
+                HStack {
+                    Text(change.text)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Undo") { viewModel.undoLastChange() }
+                        .font(.subheadline.weight(.heavy))
+                        .foregroundStyle(Theme.accent)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Theme.surface3, in: Capsule())
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             if let error = viewModel.saveError {
                 Text(error)
                     .font(.footnote)
@@ -401,6 +476,7 @@ struct WorkoutView: View {
         .padding(.top, 8)
         .padding(.bottom, 4)
         .background(Theme.background.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.2), value: viewModel.lastChange)
     }
 
     // MARK: Rows
@@ -441,11 +517,21 @@ struct WorkoutView: View {
                     .font(.caption2.weight(.heavy))
                     .tracking(0.6)
                     .foregroundStyle(Theme.accent)
+                    .padding(.leading, 10)
+                    .padding(.top, 6)
             }
             HStack(spacing: 12) {
-                statusMark(row.status)
+                Button {
+                    viewModel.toggleDone(row.id)
+                } label: {
+                    statusMark(row.status)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(row.status == .done ? "Mark not done" : "Mark done")
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(exercise.name)
+                    Text(exercise.name.plainHyphens)
                         .font(.headline.weight(.bold))
                         .foregroundStyle(row.status == .skipped ? Theme.textMuted : Theme.textPrimary)
                         .strikethrough(row.status == .skipped)
@@ -471,12 +557,19 @@ struct WorkoutView: View {
                          fill: Theme.surface3, foreground: Theme.textMuted)
                 }
             }
+            // Only the name line opens the row, so the kg field and the
+            // steppers inside it take their own taps.
+            .contentShape(Rectangle())
+            .onTapGesture { viewModel.toggleExpanded(row.id) }
             if expanded {
                 detail(row)
+                    .padding(.leading, 10)
+                    .padding(.bottom, 6)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.leading, 6)
+        .padding(.trailing, 16)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(row.status == .done ? Theme.accent.opacity(0.10) : Theme.surface2, in: shape(row))
         .overlay(alignment: .leading) {
@@ -485,8 +578,6 @@ struct WorkoutView: View {
                     .clipShape(shape(row))
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { viewModel.toggleExpanded(row.id) }
     }
 
     @ViewBuilder
@@ -574,27 +665,18 @@ struct WorkoutView: View {
 
     /// Weight: −/+ in 2.5 kg steps, or tap the number to type it.
     private func weightStepper(_ row: WorkoutRow) -> some View {
-        let binding = Binding<String>(
-            get: {
-                guard let w = row.weight else { return "" }
-                return w == w.rounded() ? String(Int(w)) : String(w)
-            },
-            set: { text in
-                if let index = viewModel.rows.firstIndex(where: { $0.id == row.id }) {
-                    viewModel.rows[index].weight = Double(text.replacingOccurrences(of: ",", with: "."))
-                }
-            }
-        )
-        return VStack(spacing: 4) {
+        VStack(spacing: 4) {
             HStack(spacing: 0) {
                 stepButton("minus") { viewModel.stepWeight(row.id, by: -2.5) }
-                TextField("–", text: binding)
-                    .keyboardType(.decimalPad)
-                    .focused($weightFocused, equals: row.id)
-                    .multilineTextAlignment(.center)
-                    .font(.title3.weight(.heavy).monospacedDigit())
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(maxWidth: .infinity)
+                WeightField(
+                    weight: row.weight,
+                    focus: $weightFocused,
+                    rowID: row.id
+                ) { newValue in
+                    if let index = viewModel.rows.firstIndex(where: { $0.id == row.id }) {
+                        viewModel.rows[index].weight = newValue
+                    }
+                }
                 stepButton("plus") { viewModel.stepWeight(row.id, by: 2.5) }
             }
             .padding(6)
@@ -634,5 +716,41 @@ struct WorkoutView: View {
         let total = Int(seconds.rounded(.down))
         let h = total / 3600, m = (total % 3600) / 60, s = total % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
+}
+
+/// The kg number, typed. Keeps its own text while you type, so "82."
+/// or "82,5" isn't rewritten under your finger; the steppers and the
+/// prefill update it from outside.
+private struct WeightField: View {
+    let weight: Double?
+    var focus: FocusState<Int?>.Binding
+    let rowID: Int
+    let onChange: (Double?) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        TextField("–", text: $text)
+            .keyboardType(.decimalPad)
+            .focused(focus, equals: rowID)
+            .multilineTextAlignment(.center)
+            .font(.title3.weight(.heavy).monospacedDigit())
+            .foregroundStyle(Theme.textPrimary)
+            .frame(maxWidth: .infinity)
+            .onAppear { text = Self.format(weight) }
+            .onChange(of: weight) {
+                if Self.parse(text) != weight { text = Self.format(weight) }
+            }
+            .onChange(of: text) { onChange(Self.parse(text)) }
+            .accessibilityLabel("Weight in kilograms")
+    }
+
+    static func parse(_ text: String) -> Double? {
+        Double(text.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespaces))
+    }
+
+    static func format(_ value: Double?) -> String {
+        guard let value else { return "" }
+        return value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
     }
 }

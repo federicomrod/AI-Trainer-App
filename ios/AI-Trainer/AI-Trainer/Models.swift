@@ -432,6 +432,10 @@ struct DayDetailResponse: Decodable {
     let durationMin: Int?
     let rpe: Double?
     let chatNote: String?
+    /// What a coaching decision changed this day to ("legs"), and why.
+    /// The session's own `type` keeps the original plan.
+    let movedTo: String?
+    let movedReason: String?
     let lifts: [DayLift]
     let checkin: DayCheckIn?
 
@@ -442,8 +446,14 @@ struct DayDetailResponse: Decodable {
         case durationMin = "duration_min"
         case rpe
         case chatNote = "chat_note"
+        case movedTo = "moved_to"
+        case movedReason = "moved_reason"
         case lifts, checkin
     }
+
+    /// The session the day actually is: the changed one if a decision
+    /// changed it, otherwise the planned type.
+    var actualType: String? { movedTo ?? type }
 }
 
 /// POST /checkin's body. One check-in per calendar day -- submitting

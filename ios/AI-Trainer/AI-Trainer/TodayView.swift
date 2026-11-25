@@ -45,6 +45,29 @@ final class TodayViewModel: ObservableObject {
     /// Goals in priority order, from GET /goals. Empty until loaded.
     @Published var goals: [String] = []
 
+    /// Today's session row from GET /day: whether it's already done,
+    /// what was logged, and what a decision changed it to. nil when
+    /// nothing is on record for today (a 404) or before it loads.
+    @Published var todayDay: DayDetailResponse?
+
+    func loadTodayDay() async {
+        do {
+            todayDay = try await client.fetchDay(date: DayLabel.todayISO)
+        } catch APIError.http(404) {
+            todayDay = nil
+        } catch {
+            // Keep what was there; the decision card still works.
+        }
+    }
+
+    /// Today's session is finished (done, partial or logged off-plan),
+    /// and it wasn't a rest day.
+    var todayIsDone: Bool {
+        guard let day = todayDay, let status = day.status,
+              ["done", "partial", "unplanned"].contains(status) else { return false }
+        return (day.actualType ?? "").lowercased() != "rest"
+    }
+
     /// Goals for the card under the session. Progress bars are only
     /// drawn from real numbers, and /goals is plain text with no
     /// baseline or target, so for now the card lists the text only.
@@ -81,6 +104,8 @@ final class TodayViewModel: ObservableObject {
         let imageBase64: String? = nil
         #endif
         await send(message: text, imageBase64: imageBase64)
+        // What was said can mark today done ("did legs, 60 min").
+        await loadTodayDay()
     }
 
     /// True when what's on screen came from the cache rather than the
@@ -204,27 +229,8 @@ struct TodayView: View {
             .scrollDismissesKeyboard(.interactively)
             .onTapGesture { draftFocused = false }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingLogSession = true
-                    } label: {
-                        Label("Log Session", systemImage: "square.and.pencil")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingCheckIn = true
-                    } label: {
-                        Label("Check In", systemImage: "checkmark.circle")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingGoals = true
-                    } label: {
-                        Label("Goals", systemImage: "target")
-                    }
-                }
+                // Check in, Log session and Goals are labelled buttons
+                // under the title now; only Settings stays an icon.
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingSettings = true
@@ -236,7 +242,9 @@ struct TodayView: View {
             .sheet(isPresented: $showingCheckIn) {
                 CheckInView()
             }
-            .sheet(isPresented: $showingLogSession) {
+            .sheet(isPresented: $showingLogSession, onDismiss: {
+                Task { await viewModel.loadTodayDay() }
+            }) {
                 LogSessionView()
             }
             .sheet(isPresented: $showingGoals, onDismiss: {
@@ -244,9 +252,13 @@ struct TodayView: View {
             }) {
                 GoalsView()
             }
-            .fullScreenCover(isPresented: $showingWorkout) {
-                if let session = viewModel.response?.decision?.today {
-                    WorkoutView(session: session)
+            .fullScreenCover(isPresented: $showingWorkout, onDismiss: {
+                // Finishing a workout logs today: swap Start for done.
+                Task { await viewModel.loadTodayDay() }
+            }) {
+                if let decision = viewModel.response?.decision {
+                    WorkoutView(session: decision.today,
+                                title: displayName(sessionType(for: decision)))
                 }
             }
             .sheet(isPresented: $showingSettings) {
@@ -260,7 +272,10 @@ struct TodayView: View {
                     messageBar
                 }
             }
-            .task { await viewModel.loadGoals() }
+            .task {
+                await viewModel.loadGoals()
+                await viewModel.loadTodayDay()
+            }
             #if DEBUG
             // Screenshots only: `-screenshotWorkout YES` opens the
             // workout a few seconds after today's session arrives.
@@ -375,7 +390,15 @@ struct TodayView: View {
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.isLoading && viewModel.response == nil {
+        if viewModel.todayIsDone, let day = viewModel.todayDay {
+            // Done is a fact on record: no need to wait for the coach.
+            doneCard(day)
+            if let response = viewModel.response, response.error == nil {
+                ForEach(Array(response.segments.filter { !$0.isHeadCoach }.enumerated()), id: \.offset) { _, segment in
+                    specialistBlock(segment)
+                }
+            }
+        } else if viewModel.isLoading && viewModel.response == nil {
             ProgressView("Checking in with your coach…")
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
@@ -403,14 +426,34 @@ struct TodayView: View {
         .padding(.top, 40)
     }
 
-    /// Small date label over a big heavy "Today".
+    /// Small date label over a big heavy "Today", then the three
+    /// things you can do from here, each with its name on it.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
-                .eyebrowStyle()
-            Text("Today")
-                .screenTitleStyle()
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(DayLabel.from(date: .now))
+                    .eyebrowStyle()
+                Text("Today")
+                    .screenTitleStyle()
+            }
+            ChipFlow(spacing: 8) {
+                actionChip("Check in", "checkmark.circle") { showingCheckIn = true }
+                actionChip("Log session", "square.and.pencil") { showingLogSession = true }
+                actionChip("Goals", "target") { showingGoals = true }
+            }
         }
+    }
+
+    private func actionChip(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(Theme.font(.subheadline, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Theme.surface2, in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -439,17 +482,18 @@ struct TodayView: View {
     /// exercises as chips, "Why this", and the big Start button.
     private func heroCard(_ decision: Decision, coachLine: String) -> some View {
         let session = decision.today
-        let isRest = decision.decision == "REST" || session.type.lowercased() == "rest"
-        let tint = SessionTypeIcon.tint(for: session.type)
+        let titleType = sessionType(for: decision)
+        let isRest = decision.decision == "REST" || titleType.lowercased() == "rest"
+        let tint = SessionTypeIcon.tint(for: titleType)
         return VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: SessionTypeIcon.symbolName(for: isRest ? "rest" : session.type))
+                Image(systemName: SessionTypeIcon.symbolName(for: isRest ? "rest" : titleType))
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 48, height: 48)
                     .background(tint.opacity(0.14), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayName(session.type))
+                    Text(isRest ? "Rest" : displayName(titleType))
                         .font(.system(.title2).weight(.heavy))
                         .tracking(-0.5)
                         .foregroundStyle(Theme.textPrimary)
@@ -460,7 +504,10 @@ struct TodayView: View {
                     }
                 }
                 Spacer()
-                Pill(text: decision.decision, fill: Theme.surface3, foreground: Theme.textMuted)
+                // Only worth a word when the plan was actually changed.
+                if decision.decision == "MODIFY" {
+                    Pill(text: "Changed", fill: Theme.accent.opacity(0.18), foreground: Theme.accent)
+                }
             }
 
             Text(coachLine)
@@ -470,11 +517,9 @@ struct TodayView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if !session.exercises.isEmpty {
-                ChipFlow(spacing: 6) {
-                    ForEach(session.exercises) { exercise in
-                        Pill(text: "\(exercise.name) · \(exercise.sets) x \(exercise.reps)")
-                    }
-                }
+                // The same table as the workout card in Coach chat.
+                ExerciseTable(exercises: session.exercises, leadingDivider: false)
+                    .background(Theme.surface1, in: RoundedRectangle(cornerRadius: Theme.rowRadius))
             }
 
             Button {
@@ -547,7 +592,102 @@ struct TodayView: View {
     }
 
     private func displayName(_ type: String) -> String {
-        type.replacingOccurrences(of: "_", with: " ").capitalized
+        SessionTitle.display(type)
+    }
+
+    /// What to call today's session. The coach's plan type when it
+    /// names one ("legs"); when it only says "gym", today's own
+    /// session from the week names it better (the changed one, if a
+    /// decision changed it).
+    private func sessionType(for decision: Decision) -> String {
+        let planned = decision.today.type
+        if SessionTitle.isGeneric(planned), let day = viewModel.todayDay?.actualType, !day.isEmpty {
+            return day
+        }
+        return planned
+    }
+
+    /// Today is already done: what it was, how long, what was logged.
+    /// No Start button.
+    private func doneCard(_ day: DayDetailResponse) -> some View {
+        let type = day.actualType ?? "session"
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(width: 48, height: 48)
+                    .background(Theme.accent, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName(type))
+                        .font(.system(.title2).weight(.heavy))
+                        .tracking(-0.5)
+                        .foregroundStyle(Theme.textPrimary)
+                    if let minutes = day.durationMin, minutes > 0 {
+                        Text("\(minutes) min")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.textMuted)
+                    }
+                }
+                Spacer()
+                Pill(text: day.status == "partial" ? "Partly done" : "Done",
+                     fill: Theme.accent.opacity(0.18), foreground: Theme.accent)
+            }
+
+            if let from = day.type, day.movedTo != nil, from.lowercased() != type.lowercased() {
+                Label("Changed from \(displayName(from))", systemImage: "arrow.triangle.branch")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.textMuted)
+            }
+
+            if !day.lifts.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(day.lifts.enumerated()), id: \.offset) { index, lift in
+                        if index > 0 { Divider().overlay(Color.white.opacity(0.06)) }
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(lift.exerciseName.plainHyphens)
+                                .font(Theme.font(.body, weight: .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
+                            Text(liftNumbers(lift))
+                                .font(Theme.font(.body, weight: .heavy))
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.textPrimary)
+                                .fixedSize()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                }
+                .background(Theme.surface1, in: RoundedRectangle(cornerRadius: Theme.rowRadius))
+            }
+
+            if let summary = day.actualSummary, !summary.isEmpty {
+                Text(summary.plainHyphens)
+                    .font(.callout)
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .heroCard()
+    }
+
+    /// "3 x 10 · 40 kg" from what was logged; only the parts that exist.
+    private func liftNumbers(_ lift: DayLift) -> String {
+        var parts: [String] = []
+        switch (lift.sets, lift.reps) {
+        case let (s?, r?): parts.append("\(s) x \(r)")
+        case let (nil, r?): parts.append("\(r) reps")
+        case let (s?, nil): parts.append("\(s) sets")
+        default: break
+        }
+        if let w = lift.weight {
+            parts.append(WorkoutViewModel.formatKg(w))
+        }
+        return parts.isEmpty ? "logged" : parts.joined(separator: " · ")
     }
 
     /// Goals in priority order. Text only: there is no measured
